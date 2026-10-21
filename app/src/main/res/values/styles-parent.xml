@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+  <style name="Theme.APlayer.Base" parent="Theme.MaterialComponents.Light.NoActionBar">
+
+    <item name="android:windowActionBarOverlay">true</item>
+    <item name="windowActionBarOverlay">true</item>
+
+    <item name="android:windowBackground">@color/light_background_color_main</item>
+    <item name="colorPrimary">?android:attr/windowBackground</item>
+
+    <item name="text_color_primary">@color/light_text_color_primary</item>
+    <item name="text_color_secondary">@color/light_text_color_secondary</item>
+    <item name="background_color_main">@color/light_background_color_main</item>
+    <item name="background_color_dialog">@color/light_background_color_dialog</item>
+    <item name="background_library_color">@color/light_library_color</item>
+
+    <item name="ripple_color">@color/light_ripple_color</item>
+    <item name="divider_color">@color/light_divider_color</item>
+
+    <item name="background_rect_ripple">@drawable/bg_rect_ripple_light</item>
+    <item name="background_oval_ripple">@drawable/bg_oval_ripple_light</item>
+
+    <item name="default_album">@drawable/album_empty_bg_day</item>
+    <item name="default_artist">@drawable/artist_empty_bg_day</item>
+
+    <item name="popupMenuStyle">@style/Widget.AppCompat.Light.PopupMenu.Overflow</item>
+
+    <item name="icon_color">@color/light_icon_color</item>
+  </style>
+
+</resources>

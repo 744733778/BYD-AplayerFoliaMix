@@ -1,0 +1,23 @@
+.gradle
+/local.properties
+/.idea
+*.iml
+/build
+.DS_Store
+*.hprof
+/.vscode
+/app/build
+/app/.cxx
+/app/schemas
+/app/buglybin
+/.vercel
+/.kotlin
+*.txt
+
+# 内置第三方依赖（taglib）的构建产物与本地配置，不入库
+/third-party/*/build/
+/third-party/taglib/local.properties
+/third-party/taglib/.gradle/
+
+# 本地备份文件
+*.bak

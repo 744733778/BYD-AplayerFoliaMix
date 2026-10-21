@@ -1,0 +1,46 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+  <style name="Theme.APlayer" parent="@style/Theme.APlayer.Base" tools:ignore="ResourceCycle"/>
+
+  <style name="Theme.APlayer.Notification" parent="TextAppearance.Compat.Notification" />
+
+  <style name="Theme.APlayer.Notification.Title" parent="TextAppearance.Compat.Notification.Title" />
+
+  <!-- Base application theme. -->
+
+  <style name="AppTheme" parent="Theme.APlayer">
+    <!-- Customize your theme here. -->
+    <item name="colorPrimary">@color/transparent</item>
+    <item name="colorPrimaryDark">@color/transparent</item>
+  </style>
+
+  <style name="AppTheme.NoActionBar">
+    <item name="windowActionBar">false</item>
+    <item name="windowNoTitle">true</item>
+  </style>
+
+  <style name="AppTheme.NoActionBar.Translucent">
+    <item name="windowActionBar">false</item>
+    <item name="windowNoTitle">true</item>
+    <item name="android:windowIsTranslucent">true</item>
+  </style>
+
+  <!--锁屏-->
+  <style name="LockScreenActivity" parent="AppTheme.NoActionBar.Translucent">
+    <item name="android:windowFrame">@null</item>
+    <item name="android:windowIsFloating">false</item>
+    <item name="android:windowIsTranslucent">true</item>
+    <item name="android:windowNoTitle">true</item>
+    <item name="android:windowBackground">@android:color/transparent</item>
+    <item name="android:backgroundDimEnabled">true</item>
+  </style>
+
+  <style name="AppShortcut" parent="AppTheme">
+    <item name="android:windowBackground">@android:color/transparent</item>
+    <item name="android:colorBackgroundCacheHint">@null</item>
+    <item name="android:windowIsTranslucent">true</item>
+    <item name="android:windowAnimationStyle">@null</item>
+  </style>
+
+
+</resources>
