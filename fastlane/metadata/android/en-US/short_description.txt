@@ -1,0 +1,1 @@
+Local music player with word-by-word lyrics, dynamic themes, and WebDAV support
