@@ -186,35 +186,36 @@ class UriFetcher @Inject constructor(
       }
     }
     if (song.isLocal()) { // 仅本地歌曲
-      if (song.albumId <= 0 || song.id <= 0) {
-        return Uri.EMPTY
-      }
-      // 自定义封面（手动匹配歌词/裁剪封面写入的专辑图优先）
-      val customArtFile = getCustomThumbIfExist(song.albumId, Constants.ALBUM)
-      if (customArtFile != null) {
-        return Uri.fromFile(customArtFile)
-      }
+      if (song.albumId > 0 && song.id > 0) {
+        // 自定义封面（手动匹配歌词/裁剪封面写入的专辑图优先）
+        val customArtFile = getCustomThumbIfExist(song.albumId, Constants.ALBUM)
+        if (customArtFile != null) {
+          return Uri.fromFile(customArtFile)
+        }
 
-      // 内置
-      if (ignoreMediaStore()) {
-        val songs = songRepo.getSongs(Audio.Media._ID + "=" + song.id, null)
-        if (songs.isNotEmpty()) {
-          return (PREFIX_EMBEDDED + songs[0].data).toUri()
-        }
-      } else {
-        if (isAlbumThumbExistInMediaCache(song.artUri)) {
-          return song.artUri
-        }
-        // MediaStore albumart 不可用时回退到内嵌 APIC
-        // （Android 10+ 不少机型的 content://media/.../albumart 已拿不到封面）
-        // 注意：必须先确认文件真的有内嵌封面，否则会短路掉后面的网络封面下载
-        val songs = songRepo.getSongs(Audio.Media._ID + "=" + song.id, null)
-        if (songs.isNotEmpty() && songs[0].data.isNotEmpty() &&
-          AudioFileCoverUtils.hasCover(songs[0].data)
-        ) {
-          return (PREFIX_EMBEDDED + songs[0].data).toUri()
+        // 内置
+        if (ignoreMediaStore()) {
+          val songs = songRepo.getSongs(Audio.Media._ID + "=" + song.id, null)
+          if (songs.isNotEmpty()) {
+            return (PREFIX_EMBEDDED + songs[0].data).toUri()
+          }
+        } else {
+          if (isAlbumThumbExistInMediaCache(song.artUri)) {
+            return song.artUri
+          }
+          // MediaStore albumart 不可用时回退到内嵌 APIC
+          // （Android 10+ 不少机型的 content://media/.../albumart 已拿不到封面）
+          // 注意：必须先确认文件真的有内嵌封面，否则会短路掉后面的网络封面下载
+          val songs = songRepo.getSongs(Audio.Media._ID + "=" + song.id, null)
+          if (songs.isNotEmpty() && songs[0].data.isNotEmpty() &&
+            AudioFileCoverUtils.hasCover(songs[0].data)
+          ) {
+            return (PREFIX_EMBEDDED + songs[0].data).toUri()
+          }
         }
       }
+      // albumId<=0 的本地歌曲（往往只能靠文件名识别）跳过上面本地探测，
+      // 直接走下面的网络兜底，避免留白。
     }
 
     // 网络
@@ -229,27 +230,50 @@ class UriFetcher @Inject constructor(
           }
         } else {
           val searchKeys = SearchKeyUtil.getSearchKeys(song)
-          for (key in searchKeys.take(CANDIDATE_KEY_NUMBER)) {
-            val candidates = neClient.searchSongList(key.value)
-            val best = candidates
-              .map { ne ->
-                ne to SearchScorer.calculateSongScoreWithKeyKind(
-                  targetSong = song,
-                  candidateTitle = ne.name,
-                  candidateArtist = ne.ar?.joinToString(", ") { it.name ?: "" },
-                  candidateAlbum = ne.al?.name,
-                  candidateDuration = ne.dt,
-                  keyword = key.value,
-                  keyKind = key.kind
-                )
-              }
-              .filter { it.second.isValid }
-              .maxByOrNull { it.second.score }
-              ?.first
+          var relaxedUrl: String? = null
+          for ((index, key) in searchKeys.withIndex()) {
+            try {
+              val candidates = neClient.searchSongList(key.value)
+              // 仅对首个关键词沿用原严格匹配逻辑（要求与目标歌曲高度吻合）
+              if (index < CANDIDATE_KEY_NUMBER) {
+                val best = candidates
+                  .map { ne ->
+                    ne to SearchScorer.calculateSongScoreWithKeyKind(
+                      targetSong = song,
+                      candidateTitle = ne.name,
+                      candidateArtist = ne.ar?.joinToString(", ") { it.name ?: "" },
+                      candidateAlbum = ne.al?.name,
+                      candidateDuration = ne.dt,
+                      keyword = key.value,
+                      keyKind = key.kind
+                    )
+                  }
+                  .filter { it.second.isValid }
+                  .maxByOrNull { it.second.score }
+                  ?.first
 
-            if (best?.al?.picUrl?.isNotEmpty() == true) {
-              return best.al.picUrl.toUri()
+                if (best?.al?.picUrl?.isNotEmpty() == true) {
+                  return best.al.picUrl.toUri()
+                }
+              }
+              // 宽松兜底：默认情况下部分歌曲（标题/歌手信息缺失或匹配度低）
+              // 无法命中严格匹配而留下空白封面。这里不再要求精确匹配，按
+              // 歌曲名/歌手/文件名 随便取第一个带封面的候选，避免留白。
+              if (relaxedUrl == null) {
+                for (ne in candidates) {
+                  val url = ne.al?.picUrl?.takeIf { it.isNotEmpty() }
+                  if (url != null) {
+                    relaxedUrl = url
+                    break
+                  }
+                }
+              }
+            } catch (e: Exception) {
+              Timber.v(e)
             }
+          }
+          if (relaxedUrl != null) {
+            return relaxedUrl.toUri()
           }
         }
       } catch (e: Exception) {
