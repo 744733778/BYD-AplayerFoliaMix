@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -82,11 +81,14 @@ fun FullscreenLyricScreen() {
   val song = playbackState.song
   val currentSong by rememberUpdatedState(song)
 
-  var lyrics by remember(song.id) { mutableStateOf<List<LyricLine>>(emptyList()) }
+  // 歌词通过 LyricManager 的响应式流刷新：切歌/联网匹配完成/手动应用都会自动更新，
+  // 不再依赖进入页面那一刻的读取，修复“联网匹配后不刷新、需返回重进”的问题。
+  val lyricsFromManager by lyricManager.lyricsFlow.collectAsStateWithLifecycle()
   var offset by remember(song.id) { mutableLongStateOf(0L) }
   var effectIndex by remember { mutableIntStateOf(0) }
   var panelOpen by remember { mutableStateOf(false) }
   var coverBitmap by remember(song.id) { mutableStateOf<Bitmap?>(null) }
+  val lyrics = lyricsFromManager ?: emptyList()
 
   val effectModes = FoliaLyricCanvasView.EffectMode.entries
   val effectMode = effectModes[effectIndex % effectModes.size]
@@ -104,9 +106,9 @@ fun FullscreenLyricScreen() {
 
   LaunchedEffect(song.id) {
     if (!currentSong.valid()) return@LaunchedEffect
-    // updateLyrics 内部已实现：本地优先 → 无歌词时多源自动联网匹配（DefProvider 回退）
-    lyricManager.updateLyrics(currentSong, null)?.join()
-    lyrics = lyricManager.lyrics ?: emptyList()
+    // 触发歌词加载（本地优先 → 无歌词时多源自动联网匹配）。
+    // 加载结果由 lyricManager.lyricsFlow 反应式刷新，无需在此等待。
+    lyricManager.updateLyrics(currentSong, null)
     offset = lyricManager.offset
   }
 
@@ -169,7 +171,7 @@ fun FullscreenLyricScreen() {
       Row(
         modifier = Modifier
           .align(Alignment.BottomCenter)
-          .padding(bottom = 24.dp)
+          .padding(bottom = 48.dp)
           .clip(RoundedCornerShape(50))
           .background(bgPanel)
           .padding(horizontal = 12.dp, vertical = 6.dp),
@@ -206,12 +208,12 @@ fun FullscreenLyricScreen() {
       }
     }
 
-    // 左下角：封面小图标 + 歌名 / 歌手（参考 folia）
+    // 左下角：封面小图标 + 歌名（参考 folia；不显示歌手，且整体上移避开车机状态栏）
     if (song.valid()) {
       Column(
         modifier = Modifier
           .align(Alignment.BottomStart)
-          .padding(start = 16.dp, bottom = 20.dp),
+          .padding(start = 16.dp, bottom = 40.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp)
       ) {
         val cover = coverBitmap
@@ -232,36 +234,23 @@ fun FullscreenLyricScreen() {
               .background(bgPanel)
           )
         }
-        Column(
-          verticalArrangement = Arrangement.spacedBy(5.dp * (1f / 3f))
-        ) {
-          Text(
-            text = song.title,
-            color = iconTint,
-            fontSize = 11.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-          )
-          Text(
-            text = song.artist,
-            color = iconTint.copy(alpha = 0.7f),
-            fontSize = 9.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-          )
-        }
+        Text(
+          text = song.title,
+          color = iconTint,
+          fontSize = 11.sp,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis
+        )
       }
     }
 
-    // 右下角主按钮：切换控制栏
+    // 右下角主按钮：切换控制栏（透明背景，避免黑色圆按键；整体上移避开车机状态栏）
     IconButton(
       onClick = { panelOpen = !panelOpen },
       modifier = Modifier
         .align(Alignment.BottomEnd)
-        .padding(bottom = 24.dp, end = 16.dp)
+        .padding(bottom = 48.dp, end = 16.dp)
         .size(52.dp)
-        .clip(CircleShape)
-        .background(bgPanel)
     ) {
       Icon(
         painter = painterResource(R.drawable.ic_more_vert_white_24dp),

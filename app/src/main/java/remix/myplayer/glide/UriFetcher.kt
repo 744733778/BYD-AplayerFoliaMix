@@ -159,6 +159,9 @@ class UriFetcher @Inject constructor(
    */
   suspend fun saveCustomCover(song: Song, coverUrl: String): Boolean = withContext(Dispatchers.IO) {
     if (song.albumId <= 0) return@withContext false
+    // 不把封面写到“未知专辑”的共享文件上：大量无标签歌曲会共享同一 albumId，
+    // 写进去会导致整组歌曲封面串味成这一张。未知专辑的歌曲改用逐歌曲网络封面兜底。
+    if (!SearchKeyUtil.hasMeaningfulInfo(song.album)) return@withContext false
     val bytes = runCatching { downloadBytes(coverUrl) }.getOrNull() ?: return@withContext false
     if (bytes.size < 1024) return@withContext false
     val dir = DiskCache.getDiskCacheDir(context, "thumbnail")
@@ -187,10 +190,18 @@ class UriFetcher @Inject constructor(
     }
     if (song.isLocal()) { // 仅本地歌曲
       if (song.albumId > 0 && song.id > 0) {
-        // 自定义封面（手动匹配歌词/裁剪封面写入的专辑图优先）
-        val customArtFile = getCustomThumbIfExist(song.albumId, Constants.ALBUM)
-        if (customArtFile != null) {
-          return Uri.fromFile(customArtFile)
+        // 仅当专辑名是“真实专辑”时才信任专辑级封面（自定义文件 / MediaStore albumart）。
+        // 大量无专辑标签的歌曲会被 MediaStore 归入同一个“未知专辑”并共享 albumId，
+        // 一旦其中某首被写入自定义封面（或 MediaStore 取了某首的内嵌图），所有同组歌曲
+        // 都会串味成同一张封面。所以未知专辑的歌曲按“无专辑”处理：只用自身内嵌图，
+        // 其余交给逐歌曲的网络兜底，避免封面互相串味。
+        val realAlbum = SearchKeyUtil.hasMeaningfulInfo(song.album)
+        if (realAlbum) {
+          // 自定义封面（手动匹配歌词/裁剪封面写入的专辑图优先）
+          val customArtFile = getCustomThumbIfExist(song.albumId, Constants.ALBUM)
+          if (customArtFile != null) {
+            return Uri.fromFile(customArtFile)
+          }
         }
 
         // 内置
@@ -200,7 +211,7 @@ class UriFetcher @Inject constructor(
             return (PREFIX_EMBEDDED + songs[0].data).toUri()
           }
         } else {
-          if (isAlbumThumbExistInMediaCache(song.artUri)) {
+          if (realAlbum && isAlbumThumbExistInMediaCache(song.artUri)) {
             return song.artUri
           }
           // MediaStore albumart 不可用时回退到内嵌 APIC
@@ -285,10 +296,12 @@ class UriFetcher @Inject constructor(
   }
 
   private fun fetch(album: Album): Uri {
-    // 自定义封面
-    val customArtFile = getCustomThumbIfExist(album.albumID, Constants.ALBUM)
-    if (customArtFile != null) {
-      return Uri.fromFile(customArtFile)
+    // 自定义封面（未知专辑不读取，避免共享 albumId 串味）
+    if (SearchKeyUtil.hasMeaningfulInfo(album.album)) {
+      val customArtFile = getCustomThumbIfExist(album.albumID, Constants.ALBUM)
+      if (customArtFile != null) {
+        return Uri.fromFile(customArtFile)
+      }
     }
 
     // 内置

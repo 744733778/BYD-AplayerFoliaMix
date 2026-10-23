@@ -58,6 +58,9 @@ object SearchKeyUtil {
 
   private fun String?.valid(): Boolean = isValidInfo(this)
 
+  /** 公开：判断一段信息（专辑名/歌手名等）是否有效、可作为真实元数据使用。 */
+  fun hasMeaningfulInfo(info: String?): Boolean = isValidInfo(info)
+
   private fun buildSongKeys(song: Song): List<SearchKey> {
     val titleValid = song.title.valid()
     val artistValid = song.artist.valid()

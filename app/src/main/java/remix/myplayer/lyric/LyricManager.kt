@@ -111,6 +111,9 @@ class LyricManager @Inject constructor(
   private val _currentNextLyricsLine = MutableStateFlow(CurrentNextLyricsLine.SEARCHING)
   val currentNextLyricsLine = _currentNextLyricsLine.asStateFlow()
 
+  /** 当前歌曲的歌词流：任何来源（本地/联网匹配/手动应用）更新歌词都会发射，供 UI 反应式刷新。 */
+  val lyricsFlow = MutableStateFlow<List<LyricLine>?>(null)
+
   private val _desktopUiState = MutableStateFlow(
     DesktopLyricUiState(
       false,
@@ -393,6 +396,7 @@ class LyricManager @Inject constructor(
   var lyrics: List<LyricLine>? = null
     private set(value) {
       field = value
+      lyricsFlow.value = value
 //      launch(Dispatchers.Main) {
 //        lyricsFragment?.get()?.let {
 //          if (value == null) {
