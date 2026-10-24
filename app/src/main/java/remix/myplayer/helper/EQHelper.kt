@@ -17,11 +17,76 @@ import remix.myplayer.data.prefs.delegate
 import remix.myplayer.service.MusicServiceRemote
 import remix.myplayer.util.Util.isIntentAvailable
 import timber.log.Timber
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * created by Remix on 2019-05-06
  */
 object EQHelper {
+
+  /**
+   * 均衡器预设：用常见频段锚点(Hz) + 相对 dB 描述，应用时会按设备实际频段中心频率
+   * 映射到最近的频段，因此可适配不同设备/不同频段数量。
+   */
+  data class EqPreset(val nameRes: Int, val points: List<Pair<Int, Float>>, val bass: Int? = null)
+
+  val EQ_PRESETS = listOf(
+    EqPreset(R.string.eq_preset_flat, emptyList()),
+    EqPreset(
+      R.string.eq_preset_rock,
+      listOf(60 to 5f, 250 to 3f, 1000 to -1f, 4000 to 4f, 12000 to 5f)
+    ),
+    EqPreset(
+      R.string.eq_preset_pop,
+      listOf(60 to -2f, 250 to 1f, 1000 to 3f, 4000 to 1f, 12000 to -1f)
+    ),
+    EqPreset(
+      R.string.eq_preset_classical,
+      listOf(60 to 4f, 250 to 1f, 1000 to 0f, 4000 to 2f, 12000 to 3f)
+    ),
+    EqPreset(
+      R.string.eq_preset_jazz,
+      listOf(60 to 3f, 250 to 2f, 1000 to -1f, 4000 to 2f, 12000 to 3f)
+    ),
+    EqPreset(
+      R.string.eq_preset_vocal,
+      listOf(60 to -3f, 250 to 0f, 1000 to 4f, 4000 to 4f, 12000 to 1f)
+    ),
+    EqPreset(
+      R.string.eq_preset_bass,
+      listOf(60 to 7f, 250 to 4f, 1000 to -1f, 4000 to -1f, 12000 to -2f),
+      bass = 600
+    ),
+    EqPreset(
+      R.string.eq_preset_treble,
+      listOf(60 to -2f, 250 to -1f, 1000 to 1f, 4000 to 4f, 12000 to 6f)
+    )
+  )
+
+  /** 将预设按设备实际频段中心频率(Hz)映射到每段 dB 增益，并 clamp 到设备允许范围。 */
+  private fun presetBandLevels(
+    preset: EqPreset,
+    centerFreqsHz: List<Int>,
+    minLevel: Int,
+    maxLevel: Int
+  ): List<Int> {
+    if (preset.points.isEmpty()) return List(centerFreqsHz.size) { 0 }
+    return centerFreqsHz.map { f ->
+      val nearest = preset.points.minByOrNull { (fa, _) -> abs(fa - f) } ?: (0 to 0f)
+      (nearest.second * 100).roundToInt().coerceIn(minLevel, maxLevel)
+    }
+  }
+
+  /** 应用某个预设：写入各频段增益，并在设备支持时设置低音增强。 */
+  fun applyEqPreset(preset: EqPreset) {
+    val centerFreqsHz = (0 until bandNumber).map { getCenterFreq(it) / 1000 }
+    val levels = presetBandLevels(preset, centerFreqsHz, minLevel.toInt(), maxLevel.toInt())
+    levels.forEachIndexed { i, lvl -> setBandLevel(i, lvl) }
+    if (preset.bass != null && isBassBoostEnabled) {
+      bassBoostStrength = preset.bass
+    }
+  }
   private val settingPrefs = EntryPointAccessors.fromApplication(
     App.context,
     SettingPrefsEntryPoint::class.java

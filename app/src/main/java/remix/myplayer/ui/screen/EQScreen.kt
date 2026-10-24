@@ -5,6 +5,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.snapTo
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,6 +16,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -115,6 +118,10 @@ fun EQScreen(backStackEntry: NavBackStackEntry) {
 
   var bassStrength by remember { mutableFloatStateOf(EQHelper.bassBoostStrength.toFloat()) }
 
+  // 当前选中的预设（用于高亮）；手动拖动滑条后变为“自定义”
+  var selectedPreset by remember { mutableStateOf<String?>(null) }
+  val customLabel = stringResource(R.string.eq_preset_custom)
+
   Scaffold(
     contentWindowInsets = WindowInsets.systemBars,
     topBar = {
@@ -174,21 +181,66 @@ fun EQScreen(backStackEntry: NavBackStackEntry) {
         ) {
           TextSecondary(stringResource(R.string.bass_boost), fontSize = 14.sp)
           // 低音增强滑条
-          LineSlider(
+              LineSlider(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .height(24.dp),
+                value = bassStrength,
+                onValueChange = { v ->
+                  bassStrength = v
+                  if (EQHelper.isBassBoostEnabled) {
+                    EQHelper.bassBoostStrength = v.roundToInt()
+                  }
+                },
+                valueRange = 0f..1000f,
+                properties = defaultLineSliderProperties.copy(),
+                enabled = EQHelper.isBassBoostEnabled
+              )
+        }
+
+        // 预设方案（频率锚点映射，适配不同设备频段数量）
+        Column(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+        ) {
+          TextSecondary(stringResource(R.string.eq_preset), fontSize = 14.sp)
+          Row(
             modifier = Modifier
               .fillMaxWidth()
-              .height(24.dp),
-            value = bassStrength,
-            onValueChange = { v ->
-              bassStrength = v
-              if (EQHelper.isBassBoostEnabled) {
-                EQHelper.bassBoostStrength = v.roundToInt()
+              .horizontalScroll(rememberScrollState())
+              .padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+          ) {
+            EQHelper.EQ_PRESETS.forEach { preset ->
+              val name = stringResource(preset.nameRes)
+              val selected = selectedPreset == name
+              Box(
+                modifier = Modifier
+                  .background(
+                    if (selected) LocalTheme.current.primary else Color.Black.copy(alpha = 0.3f),
+                    RoundedCornerShape(16.dp)
+                  )
+                  .padding(horizontal = 14.dp, vertical = 6.dp)
+                  .clickWithRipple(false, enabled = true) {
+                    EQHelper.applyEqPreset(preset)
+                    if (!enableEq) {
+                      enableEq = true
+                      EQHelper.updateEnable(true)
+                    }
+                    repeat(bandNumber) { i ->
+                      bandProgress[i] = (EQHelper.getBandLevel(i) - minLevel).toFloat()
+                    }
+                    if (EQHelper.isBassBoostEnabled) {
+                      bassStrength = EQHelper.bassBoostStrength.toFloat()
+                    }
+                    selectedPreset = name
+                  }
+              ) {
+                TextPrimary(name, fontSize = 13.sp)
               }
-            },
-            valueRange = 0f..1000f,
-            properties = defaultLineSliderProperties.copy(),
-            enabled = EQHelper.isBassBoostEnabled
-          )
+            }
+          }
         }
 
         // 频段列表
@@ -219,6 +271,7 @@ fun EQScreen(backStackEntry: NavBackStackEntry) {
                   if (enableEq) {
                     EQHelper.setBandLevel(index, (v + minLevel).roundToInt())
                   }
+                  selectedPreset = customLabel
                 },
                 valueRange = 0f..levelRange,
                 properties = defaultLineSliderProperties.copy(),
@@ -245,6 +298,7 @@ fun EQScreen(backStackEntry: NavBackStackEntry) {
               bandProgress[i] = (EQHelper.getBandLevel(i) - minLevel).toFloat()
             }
             bassStrength = EQHelper.bassBoostStrength.toFloat()
+            selectedPreset = customLabel
           }
       ) {
         Text(

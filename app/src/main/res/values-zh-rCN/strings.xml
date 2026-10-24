@@ -578,4 +578,15 @@
   <string name="title_dynamic_smb">SMB 客户端</string>
   <string name="select_image">选择图片</string>
   <string name="clear_cover">清除封面</string>
+
+  <string name="eq_preset">预设</string>
+  <string name="eq_preset_custom">自定义</string>
+  <string name="eq_preset_flat">平直</string>
+  <string name="eq_preset_rock">摇滚</string>
+  <string name="eq_preset_pop">流行</string>
+  <string name="eq_preset_classical">古典</string>
+  <string name="eq_preset_jazz">爵士</string>
+  <string name="eq_preset_vocal">人声</string>
+  <string name="eq_preset_bass">低音增强</string>
+  <string name="eq_preset_treble">高音增强</string>
 </resources>

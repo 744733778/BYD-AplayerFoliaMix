@@ -596,4 +596,15 @@
 
   <string name="play_from_this_line">Play from this line</string>
   <string name="title_dynamic_smb">SMB Client</string>
+
+  <string name="eq_preset">Presets</string>
+  <string name="eq_preset_custom">Custom</string>
+  <string name="eq_preset_flat">Flat</string>
+  <string name="eq_preset_rock">Rock</string>
+  <string name="eq_preset_pop">Pop</string>
+  <string name="eq_preset_classical">Classical</string>
+  <string name="eq_preset_jazz">Jazz</string>
+  <string name="eq_preset_vocal">Vocal</string>
+  <string name="eq_preset_bass">Bass Boost</string>
+  <string name="eq_preset_treble">Treble Boost</string>
 </resources>
