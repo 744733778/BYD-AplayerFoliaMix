@@ -574,6 +574,18 @@
   <string name="play_replay_gain_missing_gain">Default gain for untagged audio</string>
   <string name="play_replay_gain_missing_gain_tip">Used for audio without ReplayGain tags. Positive gain requires peak protection to be off.</string>
 
+  <string name="play_loudness_normalize">Loudness normalization</string>
+  <string name="play_loudness_normalize_tip">Play every song at a consistent perceived volume (mp3gain-style auto analysis)</string>
+  <string name="play_loudness_auto_analyze">Auto-analyze untagged songs</string>
+  <string name="play_loudness_auto_analyze_tip">Measure loudness on this device and apply it, no ReplayGain tags required</string>
+  <string name="play_loudness_scan">Scan library loudness</string>
+  <string name="play_loudness_scan_tip">Analyze the loudness of all songs in the background; cancellable</string>
+  <string name="play_loudness_scanning">Scanning: %1$d/%2$d</string>
+  <string name="play_loudness_scan_cancel">Cancel</string>
+  <string name="play_loudness_analyzed">%1$d songs analyzed</string>
+  <string name="play_loudness_clear">Clear analysis data</string>
+  <string name="play_loudness_clear_tip">Delete all on-device measured loudness data</string>
+
   <plurals name="song_num">
     <item quantity="one">%d song</item>
     <item quantity="other">%d songs</item>

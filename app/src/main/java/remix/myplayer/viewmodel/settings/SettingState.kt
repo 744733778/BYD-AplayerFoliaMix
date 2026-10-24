@@ -33,6 +33,7 @@ data class PlaySettings(
   val replayGainPeakProtection: Boolean,
   val replayGainPreampDb: Float,
   val replayGainMissingGainDb: Float,
+  val loudnessAutoAnalyzeEnabled: Boolean,
 )
 
 @Stable

@@ -6,10 +6,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -17,8 +22,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import remix.myplayer.R
 import remix.myplayer.data.prefs.SettingPrefs
+import remix.myplayer.service.playback.LoudnessScanManager
+import remix.myplayer.service.playback.LoudnessScanStatus
+import remix.myplayer.service.playback.loudnessScanManager
 import remix.myplayer.ui.dialog.ItemsCallbackSingleChoice
 import remix.myplayer.ui.dialog.NormalDialog
 import remix.myplayer.ui.dialog.rememberDialogState
@@ -133,6 +142,10 @@ fun ReplayGainSettingsLogic() {
     gainDb = settingState.play.replayGainMissingGainDb,
     onGainChanged = settingVM::setReplayGainMissingGain
   )
+
+  LoudnessAutoAnalyzeLogic()
+
+  LoudnessScanLogic()
 }
 
 @Composable
@@ -176,6 +189,92 @@ private fun ReplayGainGainSlider(
       TextSecondary("0 dB", fontSize = 13.sp)
       Spacer(Modifier.weight(1f))
       TextSecondary(formatGainDb(SettingPrefs.REPLAY_GAIN_GAIN_MAX_DB), fontSize = 13.sp)
+    }
+  }
+}
+
+/**
+ * Direct master switch for loudness normalization, shown in Settings → Playback.
+ * It is the same enable flag used by the ReplayGain pipeline (ReplayGain / auto-analysis).
+ */
+@Composable
+fun ReplayGainMasterSwitchLogic() {
+  val settingVM = settingViewModel
+  val settingState by settingVM.settingsState.collectAsStateWithLifecycle()
+  SwitchPreference(
+    title = stringResource(R.string.play_loudness_normalize),
+    content = stringResource(R.string.play_loudness_normalize_tip),
+    checked = settingState.play.replayGainEnabled
+  ) {
+    settingVM.setReplayGain(it, settingState.play.replayGainMode)
+  }
+}
+
+@Composable
+fun LoudnessAutoAnalyzeLogic() {
+  val settingVM = settingViewModel
+  val settingState by settingVM.settingsState.collectAsStateWithLifecycle()
+  SwitchPreference(
+    title = stringResource(R.string.play_loudness_auto_analyze),
+    content = stringResource(R.string.play_loudness_auto_analyze_tip),
+    checked = settingState.play.loudnessAutoAnalyzeEnabled
+  ) {
+    settingVM.setLoudnessAutoAnalyze(it)
+  }
+}
+
+@Composable
+fun LoudnessScanLogic() {
+  val scope = rememberCoroutineScope()
+  val scanManager = remember { loudnessScanManager() }
+  val scanState by scanManager.state.collectAsStateWithLifecycle()
+  var analyzedCount by remember { mutableStateOf(0) }
+  LaunchedEffect(scanState.status) {
+    analyzedCount = scanManager.analyzedCount()
+  }
+  val scanning = scanState.status == LoudnessScanStatus.Scanning
+
+  NormalPreference(
+    title = stringResource(R.string.play_loudness_scan),
+    content = if (scanning) {
+      stringResource(R.string.play_loudness_scanning, scanState.processed, scanState.total)
+    } else {
+      stringResource(R.string.play_loudness_scan_tip)
+    }
+  ) {
+    if (!scanning) scanManager.scanAll()
+  }
+
+  if (scanning) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+      LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+      Spacer(Modifier.height(6.dp))
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        TextSecondary(
+          stringResource(R.string.play_loudness_scanning, scanState.processed, scanState.total),
+          fontSize = 14.sp
+        )
+        Spacer(Modifier.weight(1f))
+        TextButton(onClick = { scanManager.cancel() }) {
+          TextPrimary(stringResource(R.string.play_loudness_scan_cancel))
+        }
+      }
+    }
+  }
+
+  TextSecondary(
+    stringResource(R.string.play_loudness_analyzed, analyzedCount),
+    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+    fontSize = 13.sp
+  )
+
+  NormalPreference(
+    title = stringResource(R.string.play_loudness_clear),
+    content = stringResource(R.string.play_loudness_clear_tip)
+  ) {
+    scope.launch {
+      scanManager.clearAll()
+      analyzedCount = 0
     }
   }
 }

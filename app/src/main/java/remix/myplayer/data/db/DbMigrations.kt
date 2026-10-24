@@ -66,4 +66,16 @@ internal object DbMigrations {
       db.execSQL("CREATE TABLE IF NOT EXISTS `Smb` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `alias` TEXT NOT NULL, `domain` TEXT, `account` TEXT NOT NULL, `pwd` TEXT NOT NULL, `server` TEXT NOT NULL, `share` TEXT NOT NULL, `lastUrl` TEXT NOT NULL, `createAt` INTEGER NOT NULL)")
     }
   }
+
+  val migration7to8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+      db.execSQL(
+        "CREATE TABLE IF NOT EXISTS `LoudnessGain` (" +
+          "`key` TEXT NOT NULL, `gainDb` REAL NOT NULL, `peak` REAL NOT NULL, " +
+          "`sampleRate` INTEGER NOT NULL, `durationMs` INTEGER NOT NULL, " +
+          "`fileSize` INTEGER NOT NULL, `lastModified` INTEGER NOT NULL, " +
+          "`updateTime` INTEGER NOT NULL, PRIMARY KEY (`key`))"
+      )
+    }
+  }
 }

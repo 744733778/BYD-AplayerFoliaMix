@@ -568,6 +568,18 @@
   <string name="play_replay_gain_missing_gain">无标签默认增益</string>
   <string name="play_replay_gain_missing_gain_tip">用于没有回放增益标签的音频。若要正向放大，请关闭峰值保护。</string>
 
+  <string name="play_loudness_normalize">等响度归一化</string>
+  <string name="play_loudness_normalize_tip">让每首歌以一致的感知响度播放（参考 mp3gain 自动测算）</string>
+  <string name="play_loudness_auto_analyze">自动分析无标签歌曲</string>
+  <string name="play_loudness_auto_analyze_tip">在本机测算每首歌的响度并应用，无需 ReplayGain 标签</string>
+  <string name="play_loudness_scan">扫描曲库响度</string>
+  <string name="play_loudness_scan_tip">后台分析全部歌曲的响度，可中途取消</string>
+  <string name="play_loudness_scanning">扫描中：%1$d/%2$d</string>
+  <string name="play_loudness_scan_cancel">取消</string>
+  <string name="play_loudness_analyzed">已分析 %1$d 首</string>
+  <string name="play_loudness_clear">清除分析数据</string>
+  <string name="play_loudness_clear_tip">删除本机测算的全部响度数据</string>
+
   <plurals name="song_num">
     <item quantity="other">%d首</item>
   </plurals>

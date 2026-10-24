@@ -149,6 +149,9 @@ object PrefKeys {
     /** 无回放增益标签时的默认增益 */
     const val REPLAY_GAIN_MISSING_GAIN = "replay_gain_missing_gain"
 
+    /** 等响度自动分析：对无标签歌曲使用本机测算的响度增益 */
+    const val LOUDNESS_AUTO_ANALYZE = "loudness_auto_analyze"
+
     /** 移除是否同时源文件 */
     const val DELETE_SOURCE = "delete_source"
 

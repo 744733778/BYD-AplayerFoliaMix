@@ -144,6 +144,11 @@ class SettingPrefs @Inject constructor(
     PrefKeys.Setting.REPLAY_GAIN_MISSING_GAIN,
     0f
   )
+  var loudnessAutoAnalyzeEnabled by PrefsDelegate(
+    sp,
+    PrefKeys.Setting.LOUDNESS_AUTO_ANALYZE,
+    true
+  )
   val speedValue get() = speed.toFloat()
   var playModel by PrefsDelegate(sp, PrefKeys.Setting.PLAY_MODEL, MODE_LOOP)
   var listLoop by PrefsDelegate(sp, PrefKeys.Setting.LIST_LOOP, true)

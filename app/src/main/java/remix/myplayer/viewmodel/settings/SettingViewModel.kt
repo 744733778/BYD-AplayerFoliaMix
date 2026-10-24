@@ -102,6 +102,7 @@ class SettingViewModel @Inject constructor(
       replayGainMissingGainDb = SettingPrefs.normalizeReplayGainGainDb(
         settingPrefs.replayGainMissingGainDb
       ),
+      loudnessAutoAnalyzeEnabled = settingPrefs.loudnessAutoAnalyzeEnabled,
     ),
     color = ColorSettings(
       primaryColor = themeController.appTheme.primary,
@@ -279,6 +280,11 @@ class SettingViewModel @Inject constructor(
     val normalized = SettingPrefs.normalizeReplayGainGainDb(gainDb)
     settingPrefs.replayGainMissingGainDb = normalized
     _settingsState.update { it.copy(play = it.play.copy(replayGainMissingGainDb = normalized)) }
+  }
+
+  fun setLoudnessAutoAnalyze(enabled: Boolean) {
+    settingPrefs.loudnessAutoAnalyzeEnabled = enabled
+    _settingsState.update { it.copy(play = it.play.copy(loudnessAutoAnalyzeEnabled = enabled)) }
   }
 
   fun setListLoop(enabled: Boolean) {
