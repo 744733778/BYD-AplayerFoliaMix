@@ -3,6 +3,8 @@
 一个基于 [APlayer](https://github.com/rRemix/APlayer) 魔改的 Android 本地音乐播放器，把 [folia](https://github.com/chthollyphile/folia-major) 的「全屏沉浸式歌词」视觉搬到了 Android 端，并重做了联网歌词匹配 / 封面匹配流程。
 
 > 安装到设备后显示的应用名为 **AFMplayer**。
+>
+> 当前发布版本：**v2.1.3** · 详见 [Releases](https://github.com/744733778/BYD-AplayerFoliaMix/releases)。
 
 ---
 
@@ -46,6 +48,24 @@
 
 ### 改名 / 换图标
 - 应用名改为 **AFMplayer**，启动图标替换为 folia 风格图标。
+
+### 等响度归一化（设备端自动分析，参考 mp3gain）
+文件：`app/src/main/java/remix/myplayer/service/playback/LoudnessAnalyzer.kt` 等
+
+- 设置 → 播放 新增「等响度归一化」开关；ReplayGain 详情页可「扫描曲库响度」。
+- 在设备端用 `MediaExtractor` + `MediaCodec` 解码 PCM，过 K-weighting 频率加权，按窗口 RMS 的 95 百分位测算每首歌的感知响度，再算出各自增益并应用——**没有 ReplayGain 标签的歌也能统一响度**。
+- 后台扫描整库、可取消、带进度；结果存入 Room 表（`LoudnessGain`），按文件大小/修改时间失效重算；播放时若有标签优先标签，无标签且开启自动分析则用本机测算增益。
+
+### 均衡器预设方案
+文件：`app/src/main/java/remix/myplayer/helper/EQHelper.kt`、`ui/screen/EQScreen.kt`
+
+- 均衡器界面新增 **平直 / 摇滚 / 流行 / 古典 / 爵士 / 人声 / 低音增强 / 高音增强** 预设。
+- 所有预设统一同步低音增强滑条；选中状态持久化，下次打开仍高亮并显示「当前：xxx」。
+
+### 车机适配
+- 全屏歌词：右下角设置按钮与播放条上移避让车机底部状态栏，黑色圆按键改为透明；左下角封面图标上移露出歌名（隐藏歌手）。
+- 切歌后联网匹配歌词自动刷新，无需手动返回重进。
+- 修复无标签歌曲共享 albumId 导致封面「串图」的问题；未匹配到封面时按歌名/歌手/文件名回退匹配，不再留空。
 
 ---
 
