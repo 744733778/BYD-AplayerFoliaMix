@@ -179,6 +179,9 @@ object PrefKeys {
     /** Bass Boost 强度 */
     const val BASS_BOOST_STRENGTH = "bass_boost_strength"
 
+    /** 当前选中的均衡器预设 id */
+    const val EQ_PRESET_ID = "eq_preset_id"
+
     /** Virtualizer 强度 */
     const val VIRTUALIZER_STRENGTH = "virtualizer_strength"
 

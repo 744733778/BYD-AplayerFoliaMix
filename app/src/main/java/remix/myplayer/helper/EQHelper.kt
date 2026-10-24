@@ -27,40 +27,66 @@ object EQHelper {
 
   /**
    * 均衡器预设：用常见频段锚点(Hz) + 相对 dB 描述，应用时会按设备实际频段中心频率
-   * 映射到最近的频段，因此可适配不同设备/不同频段数量。
+   * 映射到最近的频段，因此可适配不同设备/不同频段数量。每个预设都带 bass 低音增强值，
+   * 保证切换预设时低音滑条也会同步（避免“低音增强”预设拉高后切其他预设不回落）。
    */
-  data class EqPreset(val nameRes: Int, val points: List<Pair<Int, Float>>, val bass: Int? = null)
+  data class EqPreset(
+    val id: String,
+    val nameRes: Int,
+    val points: List<Pair<Int, Float>>,
+    val bass: Int = 0
+  )
+
+  const val EQ_PRESET_CUSTOM = "custom"
 
   val EQ_PRESETS = listOf(
-    EqPreset(R.string.eq_preset_flat, emptyList()),
     EqPreset(
+      "flat",
+      R.string.eq_preset_flat,
+      emptyList(),
+      bass = 0
+    ),
+    EqPreset(
+      "rock",
       R.string.eq_preset_rock,
-      listOf(60 to 5f, 250 to 3f, 1000 to -1f, 4000 to 4f, 12000 to 5f)
+      listOf(60 to 5f, 250 to 3f, 1000 to -1f, 4000 to 4f, 12000 to 5f),
+      bass = 300
     ),
     EqPreset(
+      "pop",
       R.string.eq_preset_pop,
-      listOf(60 to -2f, 250 to 1f, 1000 to 3f, 4000 to 1f, 12000 to -1f)
+      listOf(60 to -2f, 250 to 1f, 1000 to 3f, 4000 to 1f, 12000 to -1f),
+      bass = 150
     ),
     EqPreset(
+      "classical",
       R.string.eq_preset_classical,
-      listOf(60 to 4f, 250 to 1f, 1000 to 0f, 4000 to 2f, 12000 to 3f)
+      listOf(60 to 4f, 250 to 1f, 1000 to 0f, 4000 to 2f, 12000 to 3f),
+      bass = 0
     ),
     EqPreset(
+      "jazz",
       R.string.eq_preset_jazz,
-      listOf(60 to 3f, 250 to 2f, 1000 to -1f, 4000 to 2f, 12000 to 3f)
+      listOf(60 to 3f, 250 to 2f, 1000 to -1f, 4000 to 2f, 12000 to 3f),
+      bass = 120
     ),
     EqPreset(
+      "vocal",
       R.string.eq_preset_vocal,
-      listOf(60 to -3f, 250 to 0f, 1000 to 4f, 4000 to 4f, 12000 to 1f)
+      listOf(60 to -3f, 250 to 0f, 1000 to 4f, 4000 to 4f, 12000 to 1f),
+      bass = 0
     ),
     EqPreset(
+      "bass",
       R.string.eq_preset_bass,
       listOf(60 to 7f, 250 to 4f, 1000 to -1f, 4000 to -1f, 12000 to -2f),
       bass = 600
     ),
     EqPreset(
+      "treble",
       R.string.eq_preset_treble,
-      listOf(60 to -2f, 250 to -1f, 1000 to 1f, 4000 to 4f, 12000 to 6f)
+      listOf(60 to -2f, 250 to -1f, 1000 to 1f, 4000 to 4f, 12000 to 6f),
+      bass = 0
     )
   )
 
@@ -78,14 +104,21 @@ object EQHelper {
     }
   }
 
-  /** 应用某个预设：写入各频段增益，并在设备支持时设置低音增强。 */
+  /** 应用某个预设：写入各频段增益与低音增强，并记录当前预设 id。 */
   fun applyEqPreset(preset: EqPreset) {
     val centerFreqsHz = (0 until bandNumber).map { getCenterFreq(it) / 1000 }
     val levels = presetBandLevels(preset, centerFreqsHz, minLevel.toInt(), maxLevel.toInt())
     levels.forEachIndexed { i, lvl -> setBandLevel(i, lvl) }
-    if (preset.bass != null && isBassBoostEnabled) {
+    if (isBassBoostEnabled) {
       bassBoostStrength = preset.bass
     }
+    settingPrefs.eqPresetId = preset.id
+  }
+
+  fun getEqPresetId(): String = settingPrefs.eqPresetId
+
+  fun setCustomPreset() {
+    settingPrefs.eqPresetId = EQ_PRESET_CUSTOM
   }
   private val settingPrefs = EntryPointAccessors.fromApplication(
     App.context,

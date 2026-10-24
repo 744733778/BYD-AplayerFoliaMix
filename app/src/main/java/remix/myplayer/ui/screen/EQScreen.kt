@@ -118,8 +118,8 @@ fun EQScreen(backStackEntry: NavBackStackEntry) {
 
   var bassStrength by remember { mutableFloatStateOf(EQHelper.bassBoostStrength.toFloat()) }
 
-  // 当前选中的预设（用于高亮）；手动拖动滑条后变为“自定义”
-  var selectedPreset by remember { mutableStateOf<String?>(null) }
+  // 当前选中的预设 id（稳定值，跨打开保持高亮）；手动拖动滑条后变为“自定义”
+  var selectedPreset by remember { mutableStateOf(EQHelper.getEqPresetId()) }
   val customLabel = stringResource(R.string.eq_preset_custom)
 
   Scaffold(
@@ -214,7 +214,7 @@ fun EQScreen(backStackEntry: NavBackStackEntry) {
           ) {
             EQHelper.EQ_PRESETS.forEach { preset ->
               val name = stringResource(preset.nameRes)
-              val selected = selectedPreset == name
+              val selected = selectedPreset == preset.id
               Box(
                 modifier = Modifier
                   .background(
@@ -234,13 +234,38 @@ fun EQScreen(backStackEntry: NavBackStackEntry) {
                     if (EQHelper.isBassBoostEnabled) {
                       bassStrength = EQHelper.bassBoostStrength.toFloat()
                     }
-                    selectedPreset = name
+                    selectedPreset = preset.id
                   }
               ) {
                 TextPrimary(name, fontSize = 13.sp)
               }
             }
+            // “自定义”：手动调过滑条/重置后进入此状态，可点选以明确当前为自定义
+            val customSelected = selectedPreset == EQHelper.EQ_PRESET_CUSTOM
+            Box(
+              modifier = Modifier
+                .background(
+                  if (customSelected) LocalTheme.current.primary else Color.Black.copy(alpha = 0.3f),
+                  RoundedCornerShape(16.dp)
+                )
+                .padding(horizontal = 14.dp, vertical = 6.dp)
+                .clickWithRipple(false, enabled = true) {
+                  selectedPreset = EQHelper.EQ_PRESET_CUSTOM
+                  EQHelper.setCustomPreset()
+                }
+            ) {
+              TextPrimary(customLabel, fontSize = 13.sp)
+            }
           }
+          // 当前状态提示，方便重新打开时确认处在哪个预设
+          val currentName =
+            if (selectedPreset == EQHelper.EQ_PRESET_CUSTOM) {
+              customLabel
+            } else {
+              EQHelper.EQ_PRESETS.find { it.id == selectedPreset }?.let { stringResource(it.nameRes) }
+                ?: customLabel
+            }
+          TextSecondary("当前：$currentName", fontSize = 12.sp)
         }
 
         // 频段列表
@@ -271,7 +296,8 @@ fun EQScreen(backStackEntry: NavBackStackEntry) {
                   if (enableEq) {
                     EQHelper.setBandLevel(index, (v + minLevel).roundToInt())
                   }
-                  selectedPreset = customLabel
+                  selectedPreset = EQHelper.EQ_PRESET_CUSTOM
+                  EQHelper.setCustomPreset()
                 },
                 valueRange = 0f..levelRange,
                 properties = defaultLineSliderProperties.copy(),
@@ -298,7 +324,8 @@ fun EQScreen(backStackEntry: NavBackStackEntry) {
               bandProgress[i] = (EQHelper.getBandLevel(i) - minLevel).toFloat()
             }
             bassStrength = EQHelper.bassBoostStrength.toFloat()
-            selectedPreset = customLabel
+            selectedPreset = EQHelper.EQ_PRESET_CUSTOM
+            EQHelper.setCustomPreset()
           }
       ) {
         Text(

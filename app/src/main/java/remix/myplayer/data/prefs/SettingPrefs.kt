@@ -198,6 +198,8 @@ class SettingPrefs @Inject constructor(
 
   var bassBoostStrength by PrefsDelegate(sp, PrefKeys.Setting.BASS_BOOST_STRENGTH, 0)
   var enableEq by PrefsDelegate(sp, PrefKeys.Setting.ENABLE_EQ, false)
+  /** 当前选中的均衡器预设 id（"custom" 表示手动自定义）；用于界面高亮与跨打开保持状态。 */
+  var eqPresetId by PrefsDelegate(sp, PrefKeys.Setting.EQ_PRESET_ID, "custom")
 
   var checkMigration16600 by PrefsDelegate(sp, "check_migration_16600", false)
   var checkMigration20500 by PrefsDelegate(sp, "check_migration_20500", false)
