@@ -25,7 +25,6 @@ import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
-import androidx.media3.exoplayer.source.ShuffleOrder
 import remix.myplayer.data.model.audio.Song
 import remix.myplayer.data.prefs.SettingPrefs.Companion.DECODER_MODE_FFMPEG
 import remix.myplayer.data.prefs.SettingPrefs.Companion.MODE_LOOP
@@ -83,6 +82,12 @@ class ExoPlayback(
     get() = player.audioSessionId
 
   private var callback: PlayerCallback? = null
+
+  /** 进入随机模式前的原始播放顺序，退出随机模式时用于恢复 */
+  private var originalOrder: List<Song>? = null
+
+  /** 内部重排播放列表时置位，避免 setPlaylist 把刚记录的原始顺序清掉 */
+  private var suppressOrderReset = false
 
   private val localDataSourceFactory = DefaultDataSource.Factory(context)
   private val extractorsFactory = ApeExtractorsFactory()
@@ -188,6 +193,10 @@ class ExoPlayback(
   override fun setPlaylist(songs: List<Song>, index: Int, offset: Long) {
     checkMainThread()
     isPrepared = false
+    if (!suppressOrderReset) {
+      // 队列被整体替换，之前记录的原始顺序已失效
+      originalOrder = null
+    }
 
     val sources = songs.map { buildSource(it) }
     player.setMediaSources(sources, index, offset)
@@ -247,18 +256,6 @@ class ExoPlayback(
       player.moveMediaItem(existingIndex, targetIndex)
     }
 
-    // 如果是随机模式，还需要调整 ShuffleOrder 确保逻辑上也是下一首
-    if (player.shuffleModeEnabled) {
-      val indices = buildShuffledIndices(player.shuffleOrder, player.mediaItemCount).toMutableList()
-      indices.remove(targetIndex)
-      indices.add(indices.indexOf(currentIndex) + 1, targetIndex)
-
-      player.shuffleOrder = ShuffleOrder.DefaultShuffleOrder(
-        indices.toIntArray(),
-        System.currentTimeMillis()
-      )
-    }
-
     return true
   }
 
@@ -273,17 +270,6 @@ class ExoPlayback(
       }
     }
     return C.INDEX_UNSET
-  }
-
-  private fun buildShuffledIndices(order: ShuffleOrder, length: Int): IntArray {
-    val result = IntArray(length)
-    var i = 0
-    var index = order.firstIndex
-    while (index != C.INDEX_UNSET && i < length) {
-      result[i++] = index
-      index = order.getNextIndex(index)
-    }
-    return if (i == length) result else IntArray(length) { it }
   }
 
   override fun removeSong(index: Int) {
@@ -319,11 +305,10 @@ class ExoPlayback(
 
       MODE_SHUFFLE -> {
         player.repeatMode = if (listLoop) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF
-        // Media3 会在关闭随机模式后保留原 ShuffleOrder，重新进入时需要主动洗牌。
-        if (!player.shuffleModeEnabled) {
-          player.shuffleOrder = ShuffleOrder.DefaultShuffleOrder(player.mediaItemCount)
-        }
-        player.shuffleModeEnabled = true
+        // 随机顺序由 shuffleQueue() 物理重排播放列表实现。
+        // 这里不能用 ExoPlayer 的 shuffleModeEnabled：那会让每次切歌都重新随机，
+        // 播放队列显示的顺序与实际播放顺序对不上，队列就不可信了。
+        player.shuffleModeEnabled = false
       }
 
       else -> {
@@ -331,6 +316,62 @@ class ExoPlayback(
         player.shuffleModeEnabled = false
       }
     }
+  }
+
+  /**
+   * 生成随机播放队列。
+   *
+   * 通过物理重排播放列表实现，因此「播放队列显示的顺序 == 实际播放顺序」，
+   * 随机顺序生成后保持稳定，直到下一次重新随机。
+   *
+   * @return 是否真的发生了重排
+   */
+  fun shuffleQueue(): Boolean {
+    checkMainThread()
+    val current = getPlaylist()
+    if (current.size <= 1) return false
+
+    val currentSongId = currentSong?.id
+    val currentPosition = position
+    // 首次进入随机模式时记录原始顺序，退出随机模式时用于恢复
+    if (originalOrder == null) {
+      originalOrder = current
+    }
+
+    val shuffled = current.shuffled()
+    if (shuffled == current) return false
+    val newIndex = currentSongId?.let { id -> shuffled.indexOfFirst { it.id == id } } ?: -1
+    suppressOrderReset = true
+    try {
+      setPlaylist(shuffled, newIndex.takeIf { it >= 0 } ?: 0, currentPosition)
+    } finally {
+      suppressOrderReset = false
+    }
+    return true
+  }
+
+  /**
+   * 恢复进入随机模式前的原始顺序。
+   *
+   * @return 是否真的发生了重排
+   */
+  fun restoreOriginalOrder(): Boolean {
+    checkMainThread()
+    val original = originalOrder ?: return false
+    originalOrder = null
+    val current = getPlaylist()
+    if (current == original) return false
+
+    val currentSongId = currentSong?.id
+    val currentPosition = position
+    val newIndex = currentSongId?.let { id -> original.indexOfFirst { it.id == id } } ?: -1
+    suppressOrderReset = true
+    try {
+      setPlaylist(original, newIndex.takeIf { it >= 0 } ?: 0, currentPosition)
+    } finally {
+      suppressOrderReset = false
+    }
+    return true
   }
 
   override fun skipToNext() {

@@ -27,5 +27,10 @@ interface Command {
     const val TOGGLE_DESKTOP_LYRIC: Int = 13
     const val TOGGLE_STATUS_BAR_LRC: Int = 14
     const val SEEK_TO: Int = 15
+
+    /**
+     * 重新生成随机播放队列
+     */
+    const val REGENERATE_SHUFFLE: Int = 16
   }
 }

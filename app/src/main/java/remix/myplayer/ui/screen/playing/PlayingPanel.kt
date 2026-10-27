@@ -25,7 +25,10 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -66,6 +69,7 @@ private fun Portrait(isVisible: Boolean) {
     val playbackState by playbackViewModel.playbackUiState.collectAsStateWithLifecycle()
     val swatch by playbackViewModel.swatch.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
+    var showPlayQueue by remember { mutableStateOf(false) }
 
     PlayingTopBar(playbackState.song, swatch)
 
@@ -101,7 +105,11 @@ private fun Portrait(isVisible: Boolean) {
               .fillMaxSize()
               .clipToBounds()
           ) {
-            PlayingLyric(playbackState.song)
+            if (showPlayQueue) {
+              PlayQueuePanelContent(onClose = { showPlayQueue = false })
+            } else {
+              PlayingLyric(playbackState.song)
+            }
           }
         }
       }
@@ -114,7 +122,21 @@ private fun Portrait(isVisible: Boolean) {
     val playingScreenBottom =
       settingViewModel.settingsState.collectAsStateWithLifecycle().value.playingScreen.bottom
     val showBottomBar = playingScreenBottom != SettingPrefs.BOTTOM_SHOW_NONE
-    PlayingControl(Modifier.weight(if (showBottomBar) 1f else 2f), playbackState, swatch)
+    PlayingControl(
+      modifier = Modifier.weight(if (showBottomBar) 1f else 2f),
+      playbackUiState = playbackState,
+      swatch = swatch,
+      onPlayQueueClick = {
+        val next = !showPlayQueue
+        showPlayQueue = next
+        // 队列显示在歌词页，若当前在封面页则自动翻过去
+        if (next && pagerState.currentPage != 1) {
+          scope.launch {
+            pagerState.animateScrollToPage(1)
+          }
+        }
+      }
+    )
 
     if (showBottomBar) {
       PlayingUtilityBar(
@@ -197,6 +219,7 @@ private fun RegularLandscape(isVisible: Boolean) {
   ) {
     val playbackState by playbackViewModel.playbackUiState.collectAsStateWithLifecycle()
     val swatch by playbackViewModel.swatch.collectAsStateWithLifecycle()
+    var showPlayQueue by remember { mutableStateOf(false) }
 
     PlayingTopBar(playbackState.song, swatch)
 
@@ -220,7 +243,11 @@ private fun RegularLandscape(isVisible: Boolean) {
           .clipToBounds(),
         contentAlignment = Alignment.Center
       ) {
-        PlayingLyric(playbackState.song)
+        if (showPlayQueue) {
+          PlayQueuePanelContent(onClose = { showPlayQueue = false })
+        } else {
+          PlayingLyric(playbackState.song)
+        }
       }
     }
 
@@ -228,7 +255,12 @@ private fun RegularLandscape(isVisible: Boolean) {
 
     PlayingSeekbarWithText(swatch)
 
-    PlayingControl(Modifier.weight(1f), playbackState, swatch)
+    PlayingControl(
+      modifier = Modifier.weight(1f),
+      playbackUiState = playbackState,
+      swatch = swatch,
+      onPlayQueueClick = { showPlayQueue = !showPlayQueue }
+    )
   }
 }
 
@@ -245,6 +277,7 @@ private fun CompactLandscape(isVisible: Boolean, useExpandedControls: Boolean) {
   ) {
     val playbackState by playbackViewModel.playbackUiState.collectAsStateWithLifecycle()
     val swatch by playbackViewModel.swatch.collectAsStateWithLifecycle()
+    var showPlayQueue by remember { mutableStateOf(false) }
 
     Column(
       modifier = Modifier
@@ -281,7 +314,8 @@ private fun CompactLandscape(isVisible: Boolean, useExpandedControls: Boolean) {
         swatch = swatch,
         iconSize = if (useExpandedControls) 48.dp else null,
         playPauseSize = if (useExpandedControls) 80.dp else 56.dp,
-        buttonSize = if (useExpandedControls) 92.dp else null
+        buttonSize = if (useExpandedControls) 92.dp else null,
+        onPlayQueueClick = { showPlayQueue = !showPlayQueue }
       )
     }
 
@@ -292,7 +326,11 @@ private fun CompactLandscape(isVisible: Boolean, useExpandedControls: Boolean) {
         .clipToBounds(),
       contentAlignment = Alignment.Center
     ) {
-      PlayingLyric(playbackState.song)
+      if (showPlayQueue) {
+        PlayQueuePanelContent(onClose = { showPlayQueue = false })
+      } else {
+        PlayingLyric(playbackState.song)
+      }
     }
   }
 }

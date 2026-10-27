@@ -158,6 +158,16 @@ class MusicService : BaseService(),
       Timber.v("修改播放模式: $value")
       settingPrefs.playModel = value
       playback.setMode(value, settingPrefs.listLoop)
+      // 随机模式：生成一份随机顺序的播放队列，让「队列显示顺序 == 实际播放顺序」；
+      // 退出随机模式：恢复进入随机模式前的原始顺序。
+      val reordered = if (value == MODE_SHUFFLE) {
+        playback.shuffleQueue()
+      } else {
+        playback.restoreOriginalOrder()
+      }
+      if (reordered) {
+        launch { playQueueStore.save(playback.getPlaylist()) }
+      }
       updateMediaSessionQueue()
       pushPlaybackUiState()
       appWidgetUpdater.partiallyUpdateWidget(this)
@@ -1011,9 +1021,8 @@ class MusicService : BaseService(),
       }
 
       ACTION_SHORTCUT_SHUFFLE -> {
-        if (playModel != MODE_SHUFFLE) {
-          playModel = MODE_SHUFFLE
-        }
+        // 每次触发快捷方式都重新生成一份随机队列
+        playModel = MODE_SHUFFLE
         handleCommand(Intent(ACTION_CMD).putExtra(EXTRA_COMMAND, Command.SKIP_TO_NEXT))
       }
 
@@ -1191,6 +1200,18 @@ class MusicService : BaseService(),
       // 改变播放模式
       Command.CHANGE_MODEL -> {
         playModel = if (playModel == MODE_REPEAT) MODE_LOOP else playModel + 1
+      }
+      // 重新生成随机播放队列
+      Command.REGENERATE_SHUFFLE -> {
+        if (playModel != MODE_SHUFFLE) {
+          // 切到随机模式，setter 中会生成随机队列
+          playModel = MODE_SHUFFLE
+        } else if (playback.shuffleQueue()) {
+          // 已在随机模式：重新洗牌，保持当前歌曲与播放位置
+          launch { playQueueStore.save(playback.getPlaylist()) }
+          updateMediaSessionQueue()
+          pushPlaybackUiState()
+        }
       }
       // 取消或者添加收藏
       Command.LOVE -> {

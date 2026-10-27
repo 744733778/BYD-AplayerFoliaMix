@@ -9,18 +9,11 @@ import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
@@ -39,13 +32,9 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.palette.graphics.Palette
 import remix.myplayer.R
 import remix.myplayer.data.prefs.SettingPrefs.Companion.MODE_LOOP
@@ -53,18 +42,12 @@ import remix.myplayer.data.prefs.SettingPrefs.Companion.MODE_REPEAT
 import remix.myplayer.data.prefs.SettingPrefs.Companion.MODE_SHUFFLE
 import remix.myplayer.service.Command
 import remix.myplayer.service.MusicService
-import remix.myplayer.service.MusicService.Companion.EXTRA_POSITION
 import remix.myplayer.service.playback.PlaybackUiState
-import remix.myplayer.ui.dialog.BottomDialog
 import remix.myplayer.ui.nav.MessageNotifier
 import remix.myplayer.ui.theme.LocalTheme
-import remix.myplayer.ui.widget.common.TextPrimary
-import remix.myplayer.ui.widget.common.TextSecondary
 import remix.myplayer.ui.widget.playpause.PlayPauseView
-import remix.myplayer.util.MusicUtil.makeCmdIntent
 import remix.myplayer.util.Util
 import remix.myplayer.util.Util.sendLocalBroadcast
-import remix.myplayer.util.ext.CenterInBox
 import remix.myplayer.util.ext.clickWithRipple
 import remix.myplayer.util.ext.isPortraitOrientation
 import remix.myplayer.viewmodel.playbackViewModel
@@ -82,7 +65,8 @@ internal fun PlayingControl(
   swatch: Palette.Swatch,
   iconSize: Dp? = null,
   playPauseSize: Dp = 56.dp,
-  buttonSize: Dp? = null
+  buttonSize: Dp? = null,
+  onPlayQueueClick: () -> Unit = {}
 ) {
   Row(
     modifier = modifier
@@ -189,16 +173,9 @@ internal fun PlayingControl(
       )
     }
 
-    var showPlayQueue by remember { mutableStateOf(false) }
-    PlayQueueDialog(
-      visible = showPlayQueue,
-      onDismissRequest = { showPlayQueue = false },
-      musicState = playbackUiState
-    )
-
     ControlButton(
       onClick = {
-        showPlayQueue = true
+        onPlayQueueClick()
       },
       buttonSize = buttonSize
     ) {
@@ -208,94 +185,6 @@ internal fun PlayingControl(
         contentDescription = "PlayingPlayQueue",
         colorFilter = ColorFilter.tint(swatchColor.copy(0.5f))
       )
-    }
-  }
-}
-
-@Composable
-private fun PlayQueueDialog(
-  visible: Boolean,
-  onDismissRequest: () -> Unit,
-  musicState: PlaybackUiState
-) {
-  val playbackVM = playbackViewModel
-  val playbackState by playbackVM.playbackUiState.collectAsStateWithLifecycle()
-  val songs by playbackVM.playQueueSongs.collectAsStateWithLifecycle()
-
-  BottomDialog(
-    visible = visible,
-    onDismissRequest = onDismissRequest
-  ) {
-    Column {
-      CenterInBox(
-        modifier = Modifier
-          .height(48.dp)
-          .fillMaxWidth()
-      ) {
-        TextPrimary(
-          stringResource(R.string.play_queue, songs.size),
-          fontSize = 18.sp,
-          textAlign = TextAlign.Center
-        )
-      }
-
-      val lazyState = rememberLazyListState()
-      LazyColumn(state = lazyState) {
-        itemsIndexed(songs, key = { _, song -> song.id }) { pos, song ->
-          Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-              .height(50.dp)
-              .clickWithRipple(false) {
-                sendLocalBroadcast(
-                  makeCmdIntent(Command.PLAY_AT)
-                    .putExtra(EXTRA_POSITION, pos)
-                )
-                onDismissRequest()
-              }) {
-            Column(
-              verticalArrangement = Arrangement.Center,
-              modifier = Modifier
-                .padding(horizontal = 16.dp)
-                .weight(1f)
-            ) {
-              if (!song.valid()) {
-                TextPrimary(stringResource(R.string.song_lose_effect))
-              } else {
-                TextPrimary(
-                  song.title,
-                  color = if (song == musicState.song) LocalTheme.current.secondary else LocalTheme.current.textPrimary
-                )
-                TextSecondary(song.artist)
-              }
-            }
-
-            if (song.valid()) {
-              CenterInBox(
-                modifier = Modifier
-                  .clickWithRipple {
-                    playbackVM.removeFromQueue(song.id)
-                  }
-                  .padding(8.dp)
-              ) {
-                Image(
-                  painter = painterResource(R.drawable.icon_playqueue_delete),
-                  contentDescription = "PlayQueueDelete"
-                )
-              }
-            }
-          }
-        }
-      }
-
-      LaunchedEffect(visible) {
-        if (visible) {
-          val index = songs.indexOfFirst { it.id == playbackState.song.id }
-          if (index != -1) {
-            lazyState.scrollToItem(index)
-          }
-        }
-      }
     }
   }
 }
