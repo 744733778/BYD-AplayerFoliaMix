@@ -32,7 +32,7 @@ import kotlin.math.sin
 
 /**
  * 特效模式（folia 真实模式子集，共 6 种）。
- * 当前全部由 Canvas 2D 原生渲染——车机零黑屏风险、无 GL 依赖。
+ * 全部由 Canvas 2D 原生渲染——车机零黑屏风险、无 GL 依赖。
  * 标签 [label] 直接展示在设置页的模式切换 UI（[EffectMode.entries] 自动派生）。
  */
 enum class EffectMode(val label: String) {
@@ -54,10 +54,6 @@ enum class EffectMode(val label: String) {
   /** 商籁：胶片式镂空巨字 + 诗稿边框 + 信箱黑边 + 暗角（folia sonnet）。 */
   SONNET("商籁"),
   ;
-
-  /** 是否必须走 GLES 管线。当前 6 种模式均为 Canvas 原生渲染，恒为 false。 */
-  val requiresGl: Boolean
-    get() = false
 }
 
 /** 配色（ARGB）。由 Compose 层随主题注入。 */

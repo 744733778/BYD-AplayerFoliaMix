@@ -1,6 +1,5 @@
 package remix.myplayer.ui.widget.lyric.folia
 
-import android.app.ActivityManager
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapShader
@@ -9,20 +8,15 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
-import android.graphics.PixelFormat
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
-import android.opengl.GLSurfaceView
 import android.text.TextPaint
 import android.util.AttributeSet
 import android.util.TypedValue
-import android.util.Log
-import android.widget.TextView
-import android.widget.Toast
 import android.view.Choreographer
 import android.view.GestureDetector
 import android.view.MotionEvent
@@ -44,30 +38,20 @@ private const val DIORAMA_FOCAL = 1.0f
 private const val DIORAMA_DEPTH = 1.45f
 
 /**
- * 特效歌词渲染器（Folia 风格，混合管线：Canvas 2D 文字层 + GLES 3.x 特效层）。
+ * 特效歌词渲染器（Folia 风格，纯 Canvas 2D 管线）。
  *
  * 本类是「薄封装」：全部排版 / 动画 / 计时逻辑在 [FoliaLyricEngine]（无 android.graphics 依赖），
- * 两条渲染路径共用同一份 [FrameState] 快照，保证视觉完全一致：
+ * 渲染路径直接消费引擎产出的 [FrameState] 快照。
  *
- *  - **Canvas 路径**（[InnerCanvasView]）：6 种模式全部由 Canvas 2D 原生绘制
- *    （流光扫光 / 绘光 / 镜台透视 / 浮名字雾 / 心象升腾 / 商籁镂空），零依赖兜底；
- *  - **GLES 路径**（[GLSurfaceView] + [FoliaLyricGLRenderer]）：仅用于长按诊断探针，
- *    文字光栅化为纹理后走 GPU 管线（tint + 扫光 + bloom + 3D billboard），
- *    帧耗时看门狗按 EMA 自动升降画质；不影响正常歌词渲染。
+ * - 6 种模式（CLASSIC 流光 / LUMIERE 绘光 / DIORAMA 镜台 / FUME 浮名 / CADENZA 心象 /
+ *   SONNET 商籁）全部由 Canvas 2D 原生绘制（流光扫光 / 绘光 / 镜台透视 / 浮名字雾 /
+ *   心象升腾 / 商籁镂空），零 GLES 依赖、车机零黑屏；
+ * - 公开 API：lyrics / fontScale / effectMode / hintText / coverBitmap /
+ *   positionProvider / playingProvider / palette / onSeek / onPlaybackStateChanged；
+ * - 播放进度按墙钟外推（服务端 100ms 一跳）；只在「播放中 / 弹簧未落位 / 光晕未熄 /
+ *   粒子未散尽」时注册 Choreographer。
  *
- * 模式路由：
- *  - 全部 6 种模式（CLASSIC 流光 / LUMIERE 绘光 / DIORAMA 镜台 / FUME 浮名 /
- *    CADENZA 心象 / SONNET 商籁）均由 Canvas 2D 原生绘制，零 GLES 依赖、车机零黑屏。
- *  - GLES 仅用于长按诊断探针（[glProbeRunnable]），不影响正常歌词渲染。
- *
- * 工程细节：
- *  - 公开 API 与作者原版完全一致（lyrics / fontScale / effectMode / hintText /
- *    coverBitmap / positionProvider / playingProvider / palette / onSeek / onPlaybackStateChanged）；
- *  - 播放进度按墙钟外推（服务端 100ms 一跳）；只在「播放中 / 弹簧未落位 / 光晕未熄 /
- *    粒子未散尽」时注册 Choreographer，GL 路径配 RENDERMODE_WHEN_DIRTY 按需取帧。
- *
- * 类型说明：EffectMode / Palette 已提取为引擎的顶层类型（[EffectMode]、[Palette]），
- * 行为与原嵌套枚举/数据类一致。
+ * 类型说明：EffectMode / Palette 为引擎的顶层类型（[EffectMode]、[Palette]）。
  */
 class FoliaLyricCanvasView @JvmOverloads constructor(
   context: Context,
@@ -84,7 +68,6 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
     set(value) {
       if (field == value) return
       field = value
-      glRenderer?.palette = value
       invalidateColors()
     }
 
@@ -102,10 +85,6 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
       if (field === value) return
       field = value
       engine.lyrics = value
-      glRenderer?.invalidateLines()
-      submittedLines.clear()
-      lastLayout = null
-      updatePath()
       invalidate()
       ensureCallback()
     }
@@ -114,7 +93,6 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
     set(value) {
       if (field == value) return
       field = value
-      updatePath()
       invalidate()
       ensureCallback()
     }
@@ -132,7 +110,6 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
       if (field === value) return
       field = value
       blurCover = value?.let { makeTiny(it) }
-      glRenderer?.invalidateCover()
       invalidate()
     }
 
@@ -140,14 +117,9 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
   var playingProvider: (() -> Boolean)? = null
   var onSeek: ((Long) -> Unit)? = null
 
-  /** 当前画质分级（GL 路径看门狗自动调节；Canvas 路径恒为 HIGH）。 */
-  val qualityTier: QualityTier
-    get() = glRenderer?.quality ?: QualityTier.HIGH
-
   /**
    * 当前实际生效的模式。
-   * 全部 6 种模式均由 Canvas 2D 原生渲染，故 GL 不可用时无需降级——
-   * 直接按所选模式用 Canvas 渲染，保证车机始终有完整特效。
+   * 全部 6 种模式均由 Canvas 2D 原生渲染，直接按所选模式渲染，保证车机始终有完整特效。
    */
   fun effectiveMode(): EffectMode = effectMode
 
@@ -158,37 +130,9 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
   private val engine = FoliaLyricEngine(TextPaintMetrics())
   private val canvasView = InnerCanvasView(context)
 
-  private var glSurface: GLSurfaceView? = null
-  private var glRenderer: FoliaLyricGLRenderer? = null
-  private var useGl = false
-  /** GL 路径因失败被永久禁用（黑屏自愈 / 探针回退），直到下次冷启动。 */
-  private var glHardDisabled = false
-
-  /**
-   * GLES 路径是否参与自动渲染。
-   *
-   * 真机诊断（Adreno 830 / GLES 3.2 / 5 个 program 全 OK / FBO COMPLETE / glErr 0）证明
-   * 该车机 GL 本身健康，历史黑屏是渲染管线自身 bug；但为把「视觉确定性」放在第一位，
-   * 这里**默认关闭 GL 自动路径**：Canvas 独占渲染，永不黑屏、永不弹提示。
-   * 6 种特效已在 Canvas 侧做了强差异化实现（流光扫光 / 绘光点亮 / 镜台透视 / 浮名字雾 /
-   * 心象升腾 / 商籁镂空）。
-   *
-   * 需要排障时可在歌词区域**长按 1.2 秒**手动跑一次 GL 诊断（见 [runGlDiagnostic]），
-   * 诊断结果会以浮层展示，供截图定位 Adreno 驱动问题。
-   */
-  private val glAvailable: Boolean = GL_EFFECTS_ENABLED && detectGlEs3(context)
-
   private var callbackRegistered = false
   private var lastFrameNs = 0L
-  private var lastLayout: List<LineLayout>? = null
-  private val submittedLines = HashSet<Int>()
   private var blurCover: Bitmap? = null
-
-  /** Route B 诊断浮层（长按手动触发，20 秒后自动消失）。 */
-  private var diagOverlay: android.widget.ScrollView? = null
-  private var diagText: TextView? = null
-  private var diagGlSurface: GLSurfaceView? = null
-  private val diagHideRunnable = Runnable { diagOverlay?.visibility = View.GONE }
 
   private val gestureDetector = GestureDetectorCompat(context, object :
     GestureDetector.SimpleOnGestureListener() {
@@ -197,17 +141,11 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
       ensureCallback()
       return true
     }
-
-    /** 长按 1.2 秒 → 手动跑一次 GL 诊断（不切换渲染路径，只出报告）。 */
-    override fun onLongPress(e: MotionEvent) {
-      runGlDiagnostic()
-    }
   })
 
   init {
     clipChildren = false
     addView(canvasView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
-    buildDiagnosticOverlay()
     engine.density = resources.displayMetrics.density
     engine.spUnit = resources.displayMetrics.scaledDensity
     engine.positionProvider = { positionProvider?.invoke() ?: 0L }
@@ -215,272 +153,14 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
     setOnTouchListener { _, e -> gestureDetector.onTouchEvent(e) }
   }
 
-  /** 创建 GL 诊断浮层（默认隐藏；长按手动触发时展示，点击任意处关闭）。 */
-  private fun buildDiagnosticOverlay() {
-    val scroll = android.widget.ScrollView(context).apply {
-      layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
-      setBackgroundColor(0xE6000000.toInt())
-      visibility = View.GONE
-      isClickable = true
-      isFocusable = true
-      setOnClickListener { hideDiagnosticOverlay() }
-    }
-    val tv = TextView(context).apply {
-      setTextColor(0xFF86F08A.toInt())
-      textSize = 13f
-      typeface = Typeface.MONOSPACE
-      setPadding(28, 28, 28, 28)
-      gravity = android.view.Gravity.TOP or android.view.Gravity.START
-    }
-    scroll.addView(tv, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
-    addView(scroll)
-    diagOverlay = scroll
-    diagText = tv
-  }
-
-  private fun hideDiagnosticOverlay() {
-    removeCallbacks(diagHideRunnable)
-    diagOverlay?.visibility = View.GONE
-  }
-
-  /** 展示 GL 诊断报告（长按手动触发；20 秒后自动消失，点击可提前关闭）。 */
-  private fun showDiagnosticPopup(diag: GlDiagnostic?, reason: String) {
-    val overlay = diagOverlay ?: return
-    val tv = diagText ?: return
-    val vn = try {
-      val pi = context.packageManager.getPackageInfo(context.packageName, 0)
-      "${pi.versionName}"
-    } catch (e: Throwable) {
-      "?"
-    }
-    val sb = StringBuilder()
-    sb.append("Folia 诊断（版本 $vn）\n")
-    sb.append("当前渲染: Canvas（GL 自动渲染已关闭）\n")
-    sb.append("检测结论: $reason\n")
-    sb.append("点击屏幕关闭；如需反馈请截图本页\n")
-    sb.append("────────────────────────\n\n")
-    sb.append(diag?.toText() ?: "（无诊断数据：GL 线程可能未启动 / EGL 上下文创建失败）")
-    tv.text = sb.toString()
-    overlay.visibility = View.VISIBLE
-    overlay.bringToFront()
-    removeCallbacks(diagHideRunnable)
-    postDelayed(diagHideRunnable, DIAG_SHOW_MS)
-  }
-
-  /**
-   * 长按 1.2 秒手动跑一次 GL 诊断。
-   * 只在角落里挂一个 8×8 的透明 GLSurfaceView 取日志，**不接管渲染、不影响 Canvas 画面**；
-   * 4 秒后无论成败都拆掉并出报告。用于车机不便 adb 时截图定位 Adreno 驱动问题。
-   */
-  private fun runGlDiagnostic() {
-    if (diagGlSurface != null) return
-    diagText?.text = "正在检测 GPU（约 4 秒）…\n\n同时保持播放即可，检测不影响画面。"
-    diagOverlay?.visibility = View.VISIBLE
-    diagOverlay?.bringToFront()
-    removeCallbacks(diagHideRunnable)
-    postDelayed(diagHideRunnable, DIAG_SHOW_MS)
-
-    val renderer = FoliaLyricGLRenderer(
-      rasterizer = object : FoliaLineRasterizer {
-        override fun rasterize(lineIndex: Int, fontPx: Float, blurPadPx: Float): Bitmap? =
-          rasterizeLine(lineIndex, fontPx, blurPadPx)
-      },
-      coverProvider = { blurCover },
-    )
-    renderer.palette = palette
-    renderer.mode = effectMode
-    lastFrame?.let { renderer.frame = it }
-
-    val sv = GLSurfaceView(context).apply {
-      setEGLContextClientVersion(3)
-      holder.setFormat(PixelFormat.TRANSLUCENT)
-      setRenderer(renderer)
-      renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
-      alpha = 0f
-      isClickable = false
-    }
-    diagGlSurface = sv
-    addView(sv, LayoutParams(8, 8))
-    sv.onResume()
-
-    postDelayed({
-      diagGlSurface?.let { removeView(it); it.onPause() }
-      diagGlSurface = null
-      val r = renderer
-      val reason = when {
-        !r.surfaceCreated -> "GPU上下文创建失败(EGL)"
-        r.fallbackKind == "shader" -> "着色器编译失败"
-        r.isGlReady() -> "GL 可用（自检采样 ${r.probeLitCells}/9 格有内容）"
-        else -> "GPU初始化未完成"
-      }
-      showDiagnosticPopup(r.diagnostic, reason)
-    }, 4000L)
-  }
-
   override fun onAttachedToWindow() {
     super.onAttachedToWindow()
-    if (useGl) glSurface?.onResume()
     ensureCallback()
-    // 默认不自动跑 GL 探针（GL_EFFECTS_ENABLED = false）：
-    // 之前"探针 2s 未就绪 → 回退 + 弹提示"会在车机上很早就打断观看体验。
-    // 现在 GL 完全不参与自动渲染，排障入口改为长按手动触发 runGlDiagnostic()。
   }
 
   override fun onDetachedFromWindow() {
-    removeCallbacks(glProbeRunnable)
-    removeCallbacks(diagHideRunnable)
-    diagGlSurface?.let { removeView(it); it.onPause() }
-    diagGlSurface = null
     callbackRegistered = false
-    glSurface?.onPause()
     super.onDetachedFromWindow()
-  }
-
-  /** GL 路径不可用时回退 Canvas（一次性，避免反复重建失败的 surface）。 */
-  private fun fallbackToCanvas() {
-    useGl = false
-    glHardDisabled = true
-    val r = glRenderer
-    val reason = when {
-      r == null || !r.surfaceCreated -> "GPU上下文创建失败(EGL)"
-      r.fallbackKind == "shader" -> "着色器编译失败"
-      r.fallbackKind == "black" -> "渲染产出异常(全黑)"
-      else -> "GPU初始化未完成"
-    }
-    val detail = r?.fallbackDetail?.takeIf { it.isNotEmpty() }?.let { " $it" } ?: ""
-    glSurface?.let { removeView(it); it.onPause() }
-    glSurface = null
-    glRenderer = null
-    canvasView.visibility = View.VISIBLE
-    invalidate()
-    Log.e("FoliaLyric", "GPU特效回退：reason=$reason$detail")
-    // 自动回退不再弹任何提示（避免打断观看）：Canvas 会无缝接管同一特效。
-    // 需要定位 GL 问题时，在歌词区长按 1.2 秒即可手动查看诊断报告。
-  }
-
-  private val glProbeRunnable = Runnable {
-    if (useGl && glRenderer?.isGlReady() != true) {
-      // EGL/GLES3 上下文创建失败：放弃 GL 路径，回退 Canvas
-      fallbackToCanvas()
-    }
-  }
-
-  /** 模式 / 歌词变化时在两条渲染路径间切换。 */
-  private fun updatePath() {
-    val wantGl = effectiveMode().requiresGl && glAvailable && lyrics.isNotEmpty() && !glHardDisabled
-    if (wantGl == useGl) return
-    useGl = wantGl
-    if (wantGl) {
-      ensureGlSurface()
-      // 双层保温：GL 层初始 alpha=0（完全透明），Canvas 保持可见；
-      // 只有渲染器自检通过（scene 真的有内容）才把 GL 层顶上来并隐藏 Canvas。
-      canvasView.visibility = View.VISIBLE
-      glSurface?.alpha = 0f
-      glSurface?.visibility = View.VISIBLE
-      glSurface?.onResume()
-      removeCallbacks(glProbeRunnable)
-      postDelayed(glProbeRunnable, 2000L)
-    } else {
-      glSurface?.onPause()
-      glSurface?.visibility = View.GONE
-      canvasView.visibility = View.VISIBLE
-    }
-    ensureCallback()
-  }
-
-  private fun ensureGlSurface() {
-    if (glSurface != null) return
-    val renderer = FoliaLyricGLRenderer(
-      rasterizer = object : FoliaLineRasterizer {
-        override fun rasterize(lineIndex: Int, fontPx: Float, blurPadPx: Float): Bitmap? =
-          rasterizeLine(lineIndex, fontPx, blurPadPx)
-      },
-      coverProvider = { blurCover },
-    )
-    renderer.palette = palette
-    renderer.mode = effectiveMode()
-    glRenderer = renderer
-    val sv = GLSurfaceView(context).apply {
-      setEGLContextClientVersion(3)
-      // 不手动 setEGLConfigChooser：手写 chooser 不检查 EGL_RENDERABLE_TYPE 是否含
-      // EGL_OPENGL_ES3_BIT，在车机/Adreno 上极易选到只支持 GLES2 的 RGBA8888 配置，
-      // 导致 eglCreateContext(GLES3) 失败、GL 线程起不来、整屏黑。
-      // GLSurfaceView 默认 chooser 会根据 setEGLContextClientVersion(3) 自动筛选 GLES3 兼容配置。
-      // 半透明表面：探针期间 GL 未就绪 → 全透明 → 底层 Canvas 透出（无黑屏空窗）
-      holder.setFormat(PixelFormat.TRANSLUCENT)
-      setRenderer(renderer)
-      renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
-      // 自检通过前完全透明：GL 层即便渲染出错也不会盖住 Canvas（零黑屏风险）
-      alpha = 0f
-      isClickable = false
-      setOnTouchListener { _, e -> gestureDetector.onTouchEvent(e) }
-    }
-    glSurface = sv
-    addView(sv, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
-  }
-
-  // ============================================================================================
-  // 行位图栅化（GL 路径：白字透明底，四周预留模糊 padding）
-  // ============================================================================================
-
-  /**
-   * 把一行歌词光栅化为纹理位图。
-   * 坐标约定与 Canvas 路径一致：位图中心区 = 行块，原点 (pad, pad)，
-   * 行内文本用 rowOffsets 居中、baseline0 + row * rowPitch 定位；
-   * 翻译行画在块底部（固定较低 alpha 近似 translation 色亮度——着色器只取 alpha 通道）。
-   */
-  private fun rasterizeLine(lineIndex: Int, fontPx: Float, pad: Float): Bitmap? {
-    val l = lastFrame?.layout?.getOrNull(lineIndex) ?: return null
-    val lineW = l.rowWidths.maxOrNull() ?: return null
-    if (lineW <= 0f || fontPx <= 0f) return null
-    val w = (lineW + pad * 2f).toInt().coerceAtLeast(1)
-    val h = (l.blockHeight + pad * 2f).toInt().coerceAtLeast(1)
-    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-    val c = Canvas(bmp)
-    c.translate(pad, pad)
-    val p = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-      typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-      isFakeBoldText = true
-      textSize = fontPx
-      color = Color.WHITE
-    }
-    for (r in 0 until l.rowCount) {
-      val text = l.rowTexts.getOrNull(r) ?: continue
-      c.drawText(text, l.rowOffsets[r], l.baseline0 + r * l.rowPitch, p)
-    }
-    // 翻译行（亮度约为 translation 色的 45%，着色后近似 Canvas 路径的译文色）
-    val trans = l.line.translation
-    if (!trans.isNullOrEmpty()) {
-      p.textSize = fontPx * FoliaLyricEngine.TRANS_TO_FONT
-      p.alpha = (255 * 0.45f).toInt().coerceIn(0, 255)
-      val tw = p.measureText(trans)
-      val fm = p.fontMetrics
-      val tb = p.textSize / 2f - (fm.ascent + fm.descent) / 2f
-      c.drawText(trans, -tw / 2f, l.mainHeight + fontPx * 0.3f + tb, p)
-    }
-    return bmp
-  }
-
-  /** 把可见行的位图提交给 GL 渲染器（只提交缺失行；排版变化整体失效）。 */
-  private fun syncLineTextures(f: FrameState) {
-    val renderer = glRenderer ?: return
-    if (f.layout !== lastLayout) {
-      lastLayout = f.layout
-      submittedLines.clear()
-      renderer.invalidateLines()
-    }
-    val pad = renderer.blurPadPx
-    for (t in f.tracks) {
-      if (t.lineIndex in submittedLines) continue
-      val bmp = rasterizeLine(t.lineIndex, f.fontPx, pad) ?: continue
-      renderer.submitLine(t.lineIndex, bmp)
-      submittedLines.add(t.lineIndex)
-    }
-    // 退场超过窗口的行纹理由 renderer 保留（快速跳回时复活）；仅清理记录
-    if (submittedLines.size > f.tracks.size * 2 + 8) {
-      val visible = f.tracks.mapTo(HashSet()) { it.lineIndex }
-      submittedLines.retainAll(visible)
-    }
   }
 
   // ============================================================================================
@@ -495,11 +175,6 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
   }
 
   override fun doFrame(frameTimeNanos: Long) {
-    if (useGl && glRenderer?.needsFallback == true) {
-      Log.e("FoliaLyric", "GL 渲染持续黑屏，已回退 Canvas 路径")
-      fallbackToCanvas()
-      return
-    }
     callbackRegistered = false
     if (!isAttachedToWindow) return
 
@@ -510,29 +185,10 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
     val f = engine.stepFrame(dt)
     lastFrame = f
 
-    if (useGl) {
-      val renderer = glRenderer
-      if (renderer != null && f != null) {
-        renderer.frame = f
-        renderer.palette = palette
-        renderer.mode = effectiveMode()
-        syncLineTextures(f)
-        glSurface?.requestRender()
-        // 仅当渲染自检确认 scene 有真实内容时，才把 GL 层顶到前面并隐藏 Canvas。
-        // 未通过则 GL 层保持 alpha=0、Canvas 继续可见 —— 永远不会有黑屏空窗。
-        if (renderer.renderHealthy) {
-          if (glSurface?.alpha != 1f) glSurface?.alpha = 1f
-          if (canvasView.visibility != View.GONE) canvasView.visibility = View.GONE
-        }
-      }
-    } else {
-      canvasView.frame = f
-      canvasView.invalidate()
-    }
+    canvasView.frame = f
+    canvasView.invalidate()
 
-    val needMore = engine.isBusy() ||
-      (useGl && glRenderer?.hasActiveParticles() == true)
-    if (needMore) ensureCallback()
+    if (engine.isBusy()) ensureCallback()
   }
 
   @Volatile
@@ -556,7 +212,6 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
     engine.viewW = w
     engine.viewH = h
     blurCover = coverBitmap?.let { makeTiny(it) }
-    glRenderer?.invalidateCover()
   }
 
   private fun makeTiny(src: Bitmap): Bitmap {
@@ -588,27 +243,6 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
   }
 
   companion object {
-    private const val TAG = "FoliaLyricView"
-
-    /**
-     * GL 自动渲染总开关。
-     *
-   * 当前为 false：6 种特效均已用 Canvas 原生实现且做了强差异化（流光 / 绘光 / 镜台 / 浮名 / 心象 / 商籁），
-   * Canvas 独占可保证零黑屏、零弹窗、效果确定。GL 管线保留（长按歌词区可手动跑诊断），
-     * 待 Canvas 视觉确认后再决定是否开启「GL 增强」。
-     */
-    const val GL_EFFECTS_ENABLED = false
-
-    /** 诊断浮层展示时长（毫秒）。车机上给足截图时间，点击可提前关闭。 */
-    private const val DIAG_SHOW_MS = 20000L
-
-    /** 设备是否声明支持 GLES 3.0（真实可用性由 [glProbeRunnable] 探针确认）。 */
-    private fun detectGlEs3(context: Context): Boolean = try {
-      val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-      am != null && am.deviceConfigurationInfo.reqGlEsVersion >= 0x30000
-    } catch (e: Throwable) {
-      false
-    }
   }
 
   // ============================================================================================
