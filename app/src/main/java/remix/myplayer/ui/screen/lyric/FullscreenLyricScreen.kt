@@ -15,6 +15,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -44,13 +45,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import remix.myplayer.R
+import remix.myplayer.data.prefs.LyricPrefs
 import remix.myplayer.lyric.LyricLine
 import remix.myplayer.service.Command
 import remix.myplayer.service.playback.MusicStateSource
 import remix.myplayer.ui.nav.ExtraRestorePlayingScreen
 import remix.myplayer.ui.nav.LocalNavController
 import remix.myplayer.ui.nav.RouteLyricMatch
+import remix.myplayer.ui.widget.lyric.folia.EffectMode
 import remix.myplayer.ui.widget.lyric.folia.FoliaLyricCanvasView
+import remix.myplayer.ui.widget.lyric.folia.Palette
 import remix.myplayer.ui.theme.LocalTheme
 import remix.myplayer.util.MusicUtil.makeCmdIntent
 import remix.myplayer.util.Util.sendLocalBroadcast
@@ -85,13 +89,39 @@ fun FullscreenLyricScreen() {
   // 不再依赖进入页面那一刻的读取，修复“联网匹配后不刷新、需返回重进”的问题。
   val lyricsFromManager by lyricManager.lyricsFlow.collectAsStateWithLifecycle()
   var offset by remember(song.id) { mutableLongStateOf(0L) }
-  var effectIndex by remember { mutableIntStateOf(0) }
   var panelOpen by remember { mutableStateOf(false) }
   var coverBitmap by remember(song.id) { mutableStateOf<Bitmap?>(null) }
   val lyrics = lyricsFromManager ?: emptyList()
-
-  val effectModes = FoliaLyricCanvasView.EffectMode.entries
+  val effectModes = EffectMode.entries
+  // 特效选择持久化：以上次退出时用的特效为准（用 name 存，模式增删不会错位）
+  val lyricPrefs = mainVM.lyricPrefs
+  val initialEffectIndex = remember {
+    EffectMode.entries.indexOfFirst { it.name == lyricPrefs.lyricEffectName }
+      .let { if (it < 0) 0 else it }
+  }
+  var effectIndex by remember { mutableIntStateOf(initialEffectIndex) }
   val effectMode = effectModes[effectIndex % effectModes.size]
+
+  // 特效切换后立刻落盘
+  LaunchedEffect(effectMode) {
+    lyricPrefs.lyricEffectName = effectMode.name
+  }
+
+  // 标记「当前在全屏歌词界面」：播放页浮窗此时是收起的，无法用浮窗状态判断。
+  // 退出时把标记清掉，界面状态由播放页浮窗的观察者接管。
+  DisposableEffect(Unit) {
+    mainVM.onLyricScreen.value = true
+    lyricPrefs.lastPlayingSurface = LyricPrefs.SURFACE_LYRIC
+    onDispose {
+      mainVM.onLyricScreen.value = false
+      // 退出时播放页浮窗会恢复展开 → 界面状态回到常规播放页；
+      // 若是从这里跳去别的页面（浮窗仍收起），则记为不在播放界面。
+      lyricPrefs.lastPlayingSurface =
+        if (mainVM.playingScreenState.currentValue == PlayingScreenValue.Expanded)
+          LyricPrefs.SURFACE_REGULAR
+        else LyricPrefs.SURFACE_NONE
+    }
+  }
 
   // 从播放页进入：返回时先恢复播放页浮窗再出栈，避免闪现主界面
   val navEntry by nav.currentBackStackEntryAsState()
@@ -127,7 +157,7 @@ fun FullscreenLyricScreen() {
   }
 
   val bg = LocalTheme.current.mainBackground
-  val palette = FoliaLyricCanvasView.Palette(
+  val palette = Palette(
     active = LocalTheme.current.primary.toArgb(),
     activeSecondary = LocalTheme.current.secondary.toArgb(),
     sung = LocalTheme.current.textPrimary.toArgb(),

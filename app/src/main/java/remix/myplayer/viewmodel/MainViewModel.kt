@@ -18,6 +18,7 @@ import remix.myplayer.BuildConfig
 import remix.myplayer.R
 import remix.myplayer.data.model.audio.APlayerModel
 import remix.myplayer.data.model.github.Release
+import remix.myplayer.data.prefs.LyricPrefs
 import remix.myplayer.misc.update.DownloadWorker
 import remix.myplayer.misc.update.InAppUpdater
 import remix.myplayer.ui.dialog.DialogState
@@ -31,12 +32,22 @@ import javax.inject.Inject
 @HiltViewModel
 class MainViewModel @Inject constructor(
   @param:ApplicationContext private val context: Context,
-  private val inAppUpdater: InAppUpdater
+  private val inAppUpdater: InAppUpdater,
+  val lyricPrefs: LyricPrefs
 ) : ViewModel() {
 
   val playingScreenState = AnchoredDraggableState(
     initialValue = PlayingScreenValue.Hidden
   )
+
+  /**
+   * 当前是否停在全屏歌词（特效）界面。
+   *
+   * 在该界面时播放页浮窗是收起的（见 rememberNavigateFromPlayingScreen），
+   * 因此不能用浮窗状态判断「用户是否在播放相关界面」，需要这个独立标记，
+   * 避免持久化界面状态时被误写成 none。
+   */
+  val onLyricScreen = MutableStateFlow(false)
 
   private val _inAppUpdateState = MutableStateFlow(InAppUpdateState())
   val inAppUpdateState = _inAppUpdateState.asStateFlow()

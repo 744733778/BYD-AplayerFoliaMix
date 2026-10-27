@@ -41,6 +41,19 @@ class LyricPrefs @Inject constructor(
   var translationEnabled by PrefsDelegate(sp, KEY_TRANSLATION_ENABLED, true)
 
   /**
+   * 全屏歌词特效模式（[remix.myplayer.ui.widget.lyric.folia.EffectMode] 的 name）。
+   * 用 name 而非下标持久化，避免模式增删/重排后下标错位。
+   * 退出时用的哪个特效，下次打开沿用。
+   */
+  var lyricEffectName by PrefsDelegate(sp, KEY_LYRIC_EFFECT_NAME, "CLASSIC")
+
+  /**
+   * 上次退出时所在的「播放相关界面」，用于二次打开时恢复：
+   * "none" = 不在播放界面（库/设置等）；"regular" = 常规播放页浮窗；"lyric" = 全屏歌词特效界面。
+   */
+  var lastPlayingSurface by PrefsDelegate(sp, KEY_LAST_PLAYING_SURFACE, "none")
+
+  /**
    * 清除所有针对单首歌曲的配置
    */
   fun clearUserSave() {
@@ -78,6 +91,18 @@ class LyricPrefs @Inject constructor(
     const val KEY_GENERAL_LYRIC_ORDER = "general_lyric_order"
 
     const val KEY_TRANSLATION_ENABLED = "translation_enabled"
+
+    const val KEY_LYRIC_EFFECT_NAME = "lyric_effect_name"
+    const val KEY_LAST_PLAYING_SURFACE = "last_playing_surface"
+
+    /** [lastPlayingSurface] 取值：不在播放相关界面（库 / 设置等）。 */
+    const val SURFACE_NONE = "none"
+
+    /** [lastPlayingSurface] 取值：常规播放页（播放浮窗）。 */
+    const val SURFACE_REGULAR = "regular"
+
+    /** [lastPlayingSurface] 取值：全屏歌词特效界面。 */
+    const val SURFACE_LYRIC = "lyric"
 
     const val KEY_SONG_PREFIX = "lyric_song_"
     const val KEY_OFFSET_PREFIX = "lyric_offset_"
