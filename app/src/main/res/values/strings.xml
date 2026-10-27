@@ -97,7 +97,6 @@
   <string name="use_black_color">Use black background color</string>
 
   <string name="play_queue">Playing queue(%d)</string>
-  <string name="play_queue_page">%1$d/%2$d</string>
   <string name="choose_song">Choose songs</string>
   <string name="choose_no_song">No songs selected</string>
   <string name="set_album_cover_error">Failed to set album cover</string>
