@@ -176,6 +176,8 @@
   <string name="setting_notification_desc">通知のスタイルと操作</string>
   <string name="primary_color">プライマリカラー</string>
   <string name="primary_color_tip">好きな色を選んで設定します</string>
+  <string name="primary_color_from_cover">ジャケットから生成</string>
+  <string name="primary_color_from_cover_tip">再生中の曲のジャケットからメインテント色を自動取得します</string>
   <string name="notify_bg_color">背景カラー</string>
   <string name="notify_bg_color_info">通知の背景カラーを設定します</string>
   <string name="other">その他</string>
@@ -443,6 +445,8 @@
   <string name="force_sort_tip">強制的に楽曲、アルバム、アーティスト、プレイリストをピンイン順に並べ替えます\n読込時間が増加する可能性があります</string>
   <string name="accent_color">アクセントカラー</string>
   <string name="accent_color_tip">好きな色を選んで設定します</string>
+  <string name="accent_color_from_cover">ジャケットから生成</string>
+  <string name="accent_color_from_cover_tip">再生中の曲のジャケットからアクセント色を自動取得します</string>
   <string name="dark_theme">ダークテーマ</string>
   <string name="always_off">常にオフ</string>
   <string name="always_on">常にオン</string>

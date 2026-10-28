@@ -185,6 +185,8 @@
   <string name="setting_notification_desc">Styl powiadomień i elementy sterujące</string>
   <string name="primary_color">Główny kolor</string>
   <string name="primary_color_tip">Główny akcent kolorystyczny dla wszystkich stron</string>
+  <string name="primary_color_from_cover">Generuj z okładki</string>
+  <string name="primary_color_from_cover_tip">Automatycznie dobierz kolor główny z okładki aktualnie odtwarzanego utworu</string>
   <string name="notify_bg_color">Podstawowy kolor paska powiadomień</string>
   <string name="notify_bg_color_info">Kolor tła powiadomienia</string>
   <string name="other">Inne</string>
@@ -446,6 +448,8 @@
   <string name="force_sort_tip">Wymusza sortowanie utworów, albumów, wykonawców i playlist według transkrypcji Pinyin\nMoże znacznie wydłużyć czas ładowania</string>
   <string name="accent_color">Kolor akcentu</string>
   <string name="accent_color_tip">Wybierz swój ulubiony kolor akcentu dla aplikacji APlayer</string>
+  <string name="accent_color_from_cover">Generuj z okładki</string>
+  <string name="accent_color_from_cover_tip">Automatycznie dobierz kolor akcentu z okładki aktualnie odtwarzanego utworu</string>
   <string name="dark_theme">Ciemny motyw</string>
   <string name="always_off">Zawsze wyłączony</string>
   <string name="always_on">Zawsze włączony</string>

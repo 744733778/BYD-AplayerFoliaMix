@@ -182,6 +182,8 @@
   <string name="setting_notification_desc">通知樣式與控制選項</string>
   <string name="primary_color">主色調</string>
   <string name="primary_color_tip">所有頁面主色調</string>
+  <string name="primary_color_from_cover">根據封面生成</string>
+  <string name="primary_color_from_cover_tip">根據當前播放歌曲的封面自動提取主色調</string>
   <string name="notify_bg_color">通知列背景色</string>
   <string name="notify_bg_color_info">通知列背景顏色</string>
   <string name="other">其他</string>
@@ -443,6 +445,8 @@
   <string name="force_sort_tip">強制將歌曲、專輯、歌手、播放列表按拼音排序\n可能使加載時間大幅延長</string>
   <string name="accent_color">強調色</string>
   <string name="accent_color_tip">選擇你喜歡的強調色</string>
+  <string name="accent_color_from_cover">根據封面生成</string>
+  <string name="accent_color_from_cover_tip">根據當前播放歌曲的封面自動提取強調色</string>
   <string name="dark_theme">深色主題</string>
   <string name="always_off">總是關閉</string>
   <string name="always_on">總是開啟</string>

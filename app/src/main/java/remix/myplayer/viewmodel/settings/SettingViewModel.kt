@@ -41,6 +41,7 @@ import remix.myplayer.ui.dialog.ReNamePlayListState
 import remix.myplayer.ui.dialog.SongDetailState
 import remix.myplayer.ui.dialog.runWithLoading
 import remix.myplayer.ui.screen.playing.PlayingCoverAnimationStyle
+import remix.myplayer.ui.theme.CoverThemeExtractor
 import remix.myplayer.ui.theme.ThemeController
 import remix.myplayer.util.Util.sendLocalBroadcast
 import remix.myplayer.util.ext.updateIf
@@ -54,6 +55,7 @@ class SettingViewModel @Inject constructor(
   val settingPrefs: SettingPrefs,
   val lyricPrefs: LyricPrefs,
   val themeController: ThemeController,
+  private val coverThemeExtractor: CoverThemeExtractor,
   val lyricManager: LyricManager,
   val manualSearcher: LyricManualSearcher,
 ) : ViewModel() {
@@ -109,7 +111,9 @@ class SettingViewModel @Inject constructor(
       secondaryColor = themeController.appTheme.secondary,
       darkTheme = themeController.dark,
       blackTheme = themeController.black,
-      coloredNaviBar = themeController.appTheme.coloredNaviBar
+      coloredNaviBar = themeController.appTheme.coloredNaviBar,
+      primaryFromCover = themeController.primaryFromCover,
+      secondaryFromCover = themeController.secondaryFromCover
     ),
     library = LibrarySettings(
       songSortOrder = settingPrefs.songSortOrder,
@@ -300,12 +304,45 @@ class SettingViewModel @Inject constructor(
   // -------- Color 分组 ----------
   fun setPrimaryColor(color: Color) {
     themeController.setPrimary(color)
-    _settingsState.update { it.copy(color = it.color.copy(primaryColor = color)) }
+    _settingsState.update {
+      it.copy(color = it.color.copy(primaryColor = color, primaryFromCover = false))
+    }
   }
 
   fun setSecondaryColor(color: Color) {
     themeController.setSecondary(color)
-    _settingsState.update { it.copy(color = it.color.copy(secondaryColor = color)) }
+    _settingsState.update {
+      it.copy(color = it.color.copy(secondaryColor = color, secondaryFromCover = false))
+    }
+  }
+
+  /** 主色调跟随当前播放歌曲封面自动生成 */
+  fun setPrimaryFromCover(enabled: Boolean) {
+    themeController.setPrimaryFromCover(enabled)
+    _settingsState.update {
+      it.copy(
+        color = it.color.copy(
+          primaryFromCover = enabled,
+          // 关闭时主题回落到手动设置的主色调，同步刷新预览色块
+          primaryColor = themeController.appTheme.primary
+        )
+      )
+    }
+    if (enabled) coverThemeExtractor.refresh()
+  }
+
+  /** 强调色跟随当前播放歌曲封面自动生成 */
+  fun setSecondaryFromCover(enabled: Boolean) {
+    themeController.setSecondaryFromCover(enabled)
+    _settingsState.update {
+      it.copy(
+        color = it.color.copy(
+          secondaryFromCover = enabled,
+          secondaryColor = themeController.appTheme.secondary
+        )
+      )
+    }
+    if (enabled) coverThemeExtractor.refresh()
   }
 
   fun setDarkTheme(option: String) {

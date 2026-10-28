@@ -225,6 +225,8 @@ object PrefKeys {
     const val DARK_THEME = "dark_theme"
     const val BLACK_THEME = "black_theme"
     const val COLOR_NAVIGATION = "color_navigation"
+    const val PRIMARY_COLOR_FROM_COVER = "primary_color_from_cover"
+    const val SECONDARY_COLOR_FROM_COVER = "accent_color_from_cover"
 
     override val latestVersion = 1
   }

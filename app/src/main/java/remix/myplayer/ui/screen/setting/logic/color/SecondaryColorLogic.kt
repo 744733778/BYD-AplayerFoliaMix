@@ -10,6 +10,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import remix.myplayer.R
 import remix.myplayer.ui.dialog.ColorDialog
 import remix.myplayer.ui.dialog.rememberDialogState
+import remix.myplayer.ui.screen.setting.SwitchPreference
 import remix.myplayer.ui.screen.setting.ThemePreference
 import remix.myplayer.viewmodel.settingViewModel
 
@@ -27,6 +28,12 @@ fun SecondaryColorLogic() {
   ) {
     state.show()
   }
+
+  SwitchPreference(
+    stringResource(R.string.accent_color_from_cover),
+    stringResource(R.string.accent_color_from_cover_tip),
+    settingState.color.secondaryFromCover
+  ) { settingVM.setSecondaryFromCover(it) }
 
   var secondaryColor by remember(state.isOpen) {
     mutableStateOf(settingState.color.secondaryColor)

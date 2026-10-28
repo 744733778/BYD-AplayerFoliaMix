@@ -10,6 +10,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import remix.myplayer.R
 import remix.myplayer.ui.dialog.ColorDialog
 import remix.myplayer.ui.dialog.rememberDialogState
+import remix.myplayer.ui.screen.setting.SwitchPreference
 import remix.myplayer.ui.screen.setting.ThemePreference
 import remix.myplayer.viewmodel.settingViewModel
 
@@ -26,6 +27,12 @@ fun PrimaryColorLogic() {
   ) {
     state.show()
   }
+
+  SwitchPreference(
+    stringResource(R.string.primary_color_from_cover),
+    stringResource(R.string.primary_color_from_cover_tip),
+    settingState.color.primaryFromCover
+  ) { settingVM.setPrimaryFromCover(it) }
 
   var primaryColor by remember(state.isOpen) {
     mutableStateOf(settingState.color.primaryColor)

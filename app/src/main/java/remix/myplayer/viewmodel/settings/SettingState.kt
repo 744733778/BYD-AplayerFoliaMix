@@ -43,6 +43,8 @@ data class ColorSettings(
   val darkTheme: String,
   val blackTheme: Boolean,
   val coloredNaviBar: Boolean,
+  val primaryFromCover: Boolean,
+  val secondaryFromCover: Boolean,
 )
 
 @Stable

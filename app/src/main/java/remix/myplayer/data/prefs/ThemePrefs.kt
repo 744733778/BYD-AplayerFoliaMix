@@ -31,6 +31,10 @@ class ThemePrefs @Inject constructor(
 
   var coloredNaviBar by PrefsDelegate(sp, PrefKeys.Theme.COLOR_NAVIGATION, false)
 
+  // 主色调/强调色是否跟随当前播放歌曲的封面自动生成
+  var primaryColorFromCover by PrefsDelegate(sp, PrefKeys.Theme.PRIMARY_COLOR_FROM_COVER, false)
+  var secondaryColorFromCover by PrefsDelegate(sp, PrefKeys.Theme.SECONDARY_COLOR_FROM_COVER, false)
+
   fun resolveTheme(
     darkTheme: String,
     blackTheme: Boolean,

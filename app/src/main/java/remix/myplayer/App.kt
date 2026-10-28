@@ -14,6 +14,7 @@ import remix.myplayer.helper.LanguageHelper.setLocal
 import remix.myplayer.helper.ThirdPartyInitializer
 import remix.myplayer.misc.manager.APlayerActivityManager
 import remix.myplayer.ui.appshortcuts.DynamicShortcutManager
+import remix.myplayer.ui.theme.CoverThemeExtractor
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -25,6 +26,9 @@ class App : Application() {
 
   @Inject
   lateinit var appMigration: AppMigration
+
+  @Inject
+  lateinit var coverThemeExtractor: CoverThemeExtractor
 
   override fun attachBaseContext(base: Context) {
     saveSystemCurrentLanguage()
@@ -47,6 +51,9 @@ class App : Application() {
     ThirdPartyInitializer.init(this@App)
 
     registerActivityLifecycleCallbacks(APlayerActivityManager())
+
+    // 监听播放歌曲变化，按封面自动生成主色调/强调色
+    coverThemeExtractor.start()
   }
 
   private fun setUp() {

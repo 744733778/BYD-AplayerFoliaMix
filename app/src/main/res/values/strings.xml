@@ -185,6 +185,8 @@
   <string name="setting_notification_desc">Notification style and controls</string>
   <string name="primary_color">Primary color</string>
   <string name="primary_color_tip">Main color for all page</string>
+  <string name="primary_color_from_cover">Generate from cover</string>
+  <string name="primary_color_from_cover_tip">Automatically pick the main color from the current song cover</string>
   <string name="notify_bg_color">Base color of notification bar</string>
   <string name="notify_bg_color_info">Background color of notification</string>
   <string name="other">Other</string>
@@ -453,6 +455,8 @@
   <string name="force_sort_tip">Force sort songs, albums, artists and playlists by Pinyin\nMay make load time much longer</string>
   <string name="accent_color">Accent color</string>
   <string name="accent_color_tip">Customize your favorite color for Aplayer</string>
+  <string name="accent_color_from_cover">Generate from cover</string>
+  <string name="accent_color_from_cover_tip">Automatically pick the accent color from the current song cover</string>
   <string name="dark_theme">Dark theme</string>
   <string name="always_off">Always off</string>
   <string name="always_on">Always on</string>
