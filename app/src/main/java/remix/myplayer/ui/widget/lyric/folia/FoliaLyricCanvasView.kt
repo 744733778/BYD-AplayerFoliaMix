@@ -68,7 +68,18 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
     set(value) {
       if (field == value) return
       field = value
+      backgroundRenderer.palette = value
       invalidateColors()
+    }
+
+  /** 动态背景模式（封面模糊 / 莫奈 / 漫游 / 空）。 */
+  var backgroundMode: LyricBackgroundMode = LyricBackgroundMode.COVER_BLUR
+    set(value) {
+      if (field == value) return
+      field = value
+      backgroundRenderer.mode = value
+      invalidate()
+      ensureCallback()
     }
 
   var fontScale: Float = 1f
@@ -109,7 +120,7 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
     set(value) {
       if (field === value) return
       field = value
-      blurCover = value?.let { makeTiny(it) }
+      backgroundRenderer.setCover(value)
       invalidate()
     }
 
@@ -132,7 +143,16 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
 
   private var callbackRegistered = false
   private var lastFrameNs = 0L
-  private var blurCover: Bitmap? = null
+
+  /** 背景渲染器（莫奈 / 漫游 / 空 + 原封面模糊）。 */
+  private val backgroundRenderer = FoliaBackgroundRenderer(
+    // 后台线程回调，用 postInvalidate 而不是 invalidate（跨线程 invalidate 不安全）
+    requestRender = { postInvalidate() },
+    density = resources.displayMetrics.density
+  )
+
+  /** 背景动画时钟（秒）。由帧循环推进，仅在动画型背景下有效。 */
+  private var backgroundClock = 0f
 
   private val gestureDetector = GestureDetectorCompat(context, object :
     GestureDetector.SimpleOnGestureListener() {
@@ -182,13 +202,21 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
     else ((frameTimeNanos - lastFrameNs) / 1_000_000_000f).coerceIn(0.004f, 0.05f)
     lastFrameNs = frameTimeNanos
 
+    val playing = playingProvider?.invoke() ?: false
+
+    // 背景动画时钟（漂移 / 星空闪烁）。暂停时冻结（车机省电，与 Folia 的 paused 语义一致）。
+    if (backgroundRenderer.animated && playing) {
+      backgroundClock += dt
+    }
+
     val f = engine.stepFrame(dt)
     lastFrame = f
 
     canvasView.frame = f
     canvasView.invalidate()
 
-    if (engine.isBusy()) ensureCallback()
+    // 歌词引擎空闲时，若背景需要动画（莫奈漂移 / 漫游漂移 / 星空闪烁）仍要继续取帧
+    if (engine.isBusy() || (backgroundRenderer.animated && playing)) ensureCallback()
   }
 
   @Volatile
@@ -211,14 +239,7 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
     super.onSizeChanged(w, h, oldw, oldh)
     engine.viewW = w
     engine.viewH = h
-    blurCover = coverBitmap?.let { makeTiny(it) }
-  }
-
-  private fun makeTiny(src: Bitmap): Bitmap {
-    val target = max(24, min(width, 96) / 8)
-    val w = target
-    val h = max(1, (src.height.toLong() * w / max(1, src.width)).toInt())
-    return Bitmap.createScaledBitmap(src, w, h, true)
+    backgroundRenderer.onSizeChanged(w, h)
   }
 
   /** 文字测量适配器：引擎的 [TextMetrics] 由 textPaint 实现（Canvas 路径用）。 */
@@ -267,15 +288,12 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
     private val hintPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
       textAlign = Paint.Align.CENTER
     }
-    private val coverPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+    private val blurFilters = HashMap<Int, BlurMaskFilter>()
+    /** 心象（CADENZA）四芒星闪点。 */
     private val starPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
       style = Paint.Style.STROKE
       strokeCap = Paint.Cap.ROUND
     }
-    private val coverDst = android.graphics.RectF()
-    private val scrimPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private var bgGradient: LinearGradient? = null
-    private val blurFilters = HashMap<Int, BlurMaskFilter>()
 
     // ---- 镜台（DIORAMA）：四点透视 + 台面倒影 ----
     private val dioramaMatrix = android.graphics.Matrix()
@@ -317,7 +335,6 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
       super.onSizeChanged(w, h, oldw, oldh)
       viewW = w
       viewH = h
-      bgGradient = null
       // 商籁暗角：中心透明、四角渐暗（半径取对角线一半）
       val cx = w / 2f
       val cy = h / 2f
@@ -330,7 +347,6 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
     }
 
     fun invalidateColors() {
-      bgGradient = null
       invalidate()
     }
 
@@ -510,29 +526,8 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
     }
 
     private fun drawBackground(canvas: Canvas) {
-      val tiny = blurCover
-      if (tiny != null && !tiny.isRecycled) {
-        val scale = max(viewW.toFloat() / tiny.width, viewH.toFloat() / tiny.height)
-        val dw = tiny.width * scale
-        val dh = tiny.height * scale
-        coverPaint.alpha = 255
-        coverDst.set((viewW - dw) / 2f, (viewH - dh) / 2f, (viewW + dw) / 2f, (viewH + dh) / 2f)
-        canvas.drawBitmap(tiny, null, coverDst, coverPaint)
-      }
-      if (bgGradient == null) {
-        bgGradient = LinearGradient(
-          0f, 0f, 0f, viewH.toFloat(),
-          scrim(palette.bgTop, 0.62f), scrim(palette.bgBottom, 0.78f),
-          Shader.TileMode.CLAMP
-        )
-      }
-      scrimPaint.shader = bgGradient
-      canvas.drawRect(0f, 0f, viewW.toFloat(), viewH.toFloat(), scrimPaint)
+      backgroundRenderer.draw(canvas, viewW, viewH, backgroundClock)
     }
-
-    /** 主题背景色加不透明度当纱罩，保证模糊封面上的文字可读。 */
-    private fun scrim(color: Int, alpha: Float): Int =
-      Color.argb((255 * alpha).toInt(), Color.red(color), Color.green(color), Color.blue(color))
 
     /** 上下文行：整行一次画完 + 按距离模糊/缩放。[blurBoost] 补偿透视缩小后模糊视觉变弱。 */
     private fun drawContextLine(canvas: Canvas, l: LineLayout, alpha: Float, d: Int, blurBoost: Float = 1f) {

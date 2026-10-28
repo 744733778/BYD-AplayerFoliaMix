@@ -54,6 +54,7 @@ import remix.myplayer.ui.nav.LocalNavController
 import remix.myplayer.ui.nav.RouteLyricMatch
 import remix.myplayer.ui.widget.lyric.folia.EffectMode
 import remix.myplayer.ui.widget.lyric.folia.FoliaLyricCanvasView
+import remix.myplayer.ui.widget.lyric.folia.LyricBackgroundMode
 import remix.myplayer.ui.widget.lyric.folia.Palette
 import remix.myplayer.ui.theme.LocalTheme
 import remix.myplayer.util.MusicUtil.makeCmdIntent
@@ -105,6 +106,19 @@ fun FullscreenLyricScreen() {
   // 特效切换后立刻落盘
   LaunchedEffect(effectMode) {
     lyricPrefs.lyricEffectName = effectMode.name
+  }
+
+  // 背景模式：同样以上次退出时用的为准（用 name 存，模式增删不会错位）
+  val backgroundModes = LyricBackgroundMode.entries
+  val initialBackgroundIndex = remember {
+    LyricBackgroundMode.entries.indexOfFirst { it.name == lyricPrefs.lyricBackgroundName }
+      .let { if (it < 0) 0 else it }
+  }
+  var backgroundIndex by remember { mutableIntStateOf(initialBackgroundIndex) }
+  val backgroundMode = backgroundModes[backgroundIndex % backgroundModes.size]
+
+  LaunchedEffect(backgroundMode) {
+    lyricPrefs.lyricBackgroundName = backgroundMode.name
   }
 
   // 标记「当前在全屏歌词界面」：播放页浮窗此时是收起的，无法用浮窗状态判断。
@@ -184,6 +198,7 @@ fun FullscreenLyricScreen() {
         view.lyrics = lyrics
         view.fontScale = settingState.lyric.fontScale
         view.effectMode = effectMode
+        view.backgroundMode = backgroundMode
         view.hintText = hint
         view.coverBitmap = coverBitmap
         view.positionProvider = {
@@ -229,6 +244,12 @@ fun FullscreenLyricScreen() {
           tint = iconTint,
           label = effectMode.label,
           onClick = { effectIndex = (effectIndex + 1) % effectModes.size }
+        )
+        CtrlIcon(
+          iconRes = R.drawable.ic_wallpaper_24dp,
+          tint = iconTint,
+          label = backgroundMode.label,
+          onClick = { backgroundIndex = (backgroundIndex + 1) % backgroundModes.size }
         )
         CtrlIcon(
           iconRes = R.drawable.ic_search_white_24dp,
@@ -312,7 +333,10 @@ private fun CtrlIcon(
 ) {
   IconButton(
     onClick = onClick,
-    modifier = Modifier.size(if (label != null) 64.dp else 48.dp)
+    modifier = Modifier.size(
+      width = if (label != null) 52.dp else 48.dp,
+      height = if (label != null) 48.dp else 48.dp
+    )
   ) {
     if (label != null) {
       androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.CenterHorizontally) {

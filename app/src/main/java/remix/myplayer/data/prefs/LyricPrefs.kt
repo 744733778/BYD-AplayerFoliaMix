@@ -48,6 +48,12 @@ class LyricPrefs @Inject constructor(
   var lyricEffectName by PrefsDelegate(sp, KEY_LYRIC_EFFECT_NAME, "CLASSIC")
 
   /**
+   * 全屏歌词页的动态背景模式（[remix.myplayer.ui.widget.lyric.folia.LyricBackgroundMode] 的 name）。
+   * 同样用 name 持久化，退出时用的哪个背景，下次打开沿用。
+   */
+  var lyricBackgroundName by PrefsDelegate(sp, KEY_LYRIC_BACKGROUND_NAME, "COVER_BLUR")
+
+  /**
    * 上次退出时所在的「播放相关界面」，用于二次打开时恢复：
    * "none" = 不在播放界面（库/设置等）；"regular" = 常规播放页浮窗；"lyric" = 全屏歌词特效界面。
    */
@@ -93,6 +99,7 @@ class LyricPrefs @Inject constructor(
     const val KEY_TRANSLATION_ENABLED = "translation_enabled"
 
     const val KEY_LYRIC_EFFECT_NAME = "lyric_effect_name"
+    const val KEY_LYRIC_BACKGROUND_NAME = "lyric_background_name"
     const val KEY_LAST_PLAYING_SURFACE = "last_playing_surface"
 
     /** [lastPlayingSurface] 取值：不在播放相关界面（库 / 设置等）。 */
