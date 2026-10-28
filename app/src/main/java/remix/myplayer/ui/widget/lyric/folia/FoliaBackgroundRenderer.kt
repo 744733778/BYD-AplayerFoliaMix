@@ -65,6 +65,8 @@ class FoliaBackgroundRenderer(
     set(value) {
       if (field == value) return
       field = value
+      // 合成步骤变了，等效背景色要重算（位图产物不变，无需重建）
+      worker.execute { updateBackdrop() }
       requestRender()
     }
 
@@ -79,6 +81,21 @@ class FoliaBackgroundRenderer(
   /** 该模式是否需要持续取帧（漂移 / 闪烁）。 */
   val animated: Boolean
     get() = mode != LyricBackgroundMode.COVER_BLUR
+
+  /**
+   * 歌词所在区域的**等效背景色**（ARGB，不透明）。
+   *
+   * 背景是画出来的（封面模糊 / 莫奈洗色 / 漫游色阶），没有一个现成的「背景色」可用，
+   * 这里按各模式实际的合成步骤反推出歌词背后的颜色，供歌词对比度校正使用。
+   * 见 [FoliaLyricCanvasView] 与 [readableAgainst]。
+   */
+  @Volatile
+  var backdropColor: Int = 0
+    private set
+
+  /** 背景等效色发生变化（换封面 / 换模式 / 换主题色）时回调，供 View 侧重算歌词配色。 */
+  @Volatile
+  var onBackdropChanged: (() -> Unit)? = null
 
   // ==========================================================================================
   // 内部状态
@@ -166,7 +183,7 @@ class FoliaBackgroundRenderer(
     if (bgGradient == null || bgGradientHeight != height) {
       bgGradient = LinearGradient(
         0f, 0f, 0f, height.toFloat(),
-        scrim(palette.bgTop, 0.62f), scrim(palette.bgBottom, 0.78f),
+        scrim(palette.bgTop, COVER_BLUR_SCRIM_TOP), scrim(palette.bgBottom, COVER_BLUR_SCRIM_BOTTOM),
         Shader.TileMode.CLAMP
       )
       bgGradientHeight = height
@@ -201,10 +218,10 @@ class FoliaBackgroundRenderer(
       readabilityGradient = LinearGradient(
         0f, 0f, width.toFloat(), 0f,
         intArrayOf(
-          scrim(palette.bgTop, 0.18f),
-          scrim(palette.bgTop, 0.32f),
-          scrim(palette.bgBottom, 0.66f),
-          scrim(palette.bgBottom, 0.82f),
+          scrim(palette.bgTop, MONET_READABILITY_TOP_LEFT),
+          scrim(palette.bgTop, MONET_READABILITY_TOP_LEFT_HIGH),
+          scrim(palette.bgBottom, MONET_READABILITY_BOTTOM_RIGHT),
+          scrim(palette.bgBottom, MONET_READABILITY_BOTTOM_RIGHT_HIGH),
         ),
         floatArrayOf(0f, 0.34f, 0.70f, 1f),
         Shader.TileMode.CLAMP
@@ -240,14 +257,14 @@ class FoliaBackgroundRenderer(
 
     // 主题底色压一层（Folia overlayEnabled=true, overlayOpacity=0.35）
     scrimPaint.shader = null
-    scrimPaint.color = scrim(palette.bgBottom, 0.35f)
+    scrimPaint.color = scrim(palette.bgBottom, NOMAND_BASE_SCRIM)
     canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), scrimPaint)
 
     // 上下方向的柔和压暗，保证歌词可读
     if (nomandScrim == null || nomandScrimHeight != height) {
       nomandScrim = LinearGradient(
         0f, 0f, 0f, height.toFloat(),
-        scrim(palette.bgTop, 0.30f), scrim(palette.bgBottom, 0.55f),
+        scrim(palette.bgTop, NOMAND_SCRIM_TOP), scrim(palette.bgBottom, NOMAND_SCRIM_BOTTOM),
         Shader.TileMode.CLAMP
       )
       nomandScrimHeight = height
@@ -316,8 +333,93 @@ class FoliaBackgroundRenderer(
       blurCover = blur
       monetBitmap = monet
       ditherBitmap = dither
+      updateBackdrop()
       requestRender()
     }
+  }
+
+  // ------------------------------------------------------------------------------------------
+  // 等效背景色（供歌词对比度校正使用）
+  // ------------------------------------------------------------------------------------------
+
+  /**
+   * 按当前模式的**真实合成步骤**反推歌词背后的等效背景色。
+   *
+   * 各模式都是「图 + 若干层纱罩」的叠加，等效色 = 把纱罩按同样的 alpha 叠到图上。
+   * 纱罩的 alpha 直接复用绘制时的常量，保证与画面完全一致。
+   */
+  private fun updateBackdrop() {
+    val p = palette
+    val base = when (mode) {
+      LyricBackgroundMode.COVER_BLUR -> averageColor(blurCover) ?: p.bgBottom
+      LyricBackgroundMode.MONET -> averageColor(monetBitmap) ?: averageColor(blurCover) ?: p.bgBottom
+      LyricBackgroundMode.NOMAND -> averageColor(ditherBitmap) ?: averageColor(blurCover) ?: p.bgBottom
+      LyricBackgroundMode.SORA -> p.bgBottom
+    }
+    val result = when (mode) {
+      // 上下渐变纱罩：顶部 bgTop@62% → 底部 bgBottom@78%，取中部（歌词所在区）
+      LyricBackgroundMode.COVER_BLUR -> {
+        val t = 0.5f
+        val alpha = COVER_BLUR_SCRIM_TOP + (COVER_BLUR_SCRIM_BOTTOM - COVER_BLUR_SCRIM_TOP) * t
+        over(base, lerpColor(p.bgTop, p.bgBottom, t), alpha)
+      }
+      // 横向可读性渐变：左侧 bgTop@18~32% → 右侧 bgBottom@66~82%，取中段
+      LyricBackgroundMode.MONET -> {
+        val t = 0.5f
+        val alpha = MONET_READABILITY_TOP_LEFT_HIGH +
+          (MONET_READABILITY_BOTTOM_RIGHT - MONET_READABILITY_TOP_LEFT_HIGH) * t
+        over(base, lerpColor(p.bgTop, p.bgBottom, t), alpha)
+      }
+      // 漫游：先压一层主题底色，再叠上下压暗
+      LyricBackgroundMode.NOMAND -> {
+        val withBase = over(base, p.bgBottom, NOMAND_BASE_SCRIM)
+        val t = 0.5f
+        val alpha = NOMAND_SCRIM_TOP + (NOMAND_SCRIM_BOTTOM - NOMAND_SCRIM_TOP) * t
+        over(withBase, lerpColor(p.bgTop, p.bgBottom, t), alpha)
+      }
+      // 星空：纯主题底色
+      LyricBackgroundMode.SORA -> base
+    }
+    if (result == backdropColor) return
+    backdropColor = result
+    onBackdropChanged?.invoke()
+  }
+
+  /** 取位图平均色（等效背景色只需要大致色调，不必逐像素精确）。 */
+  private fun averageColor(bitmap: Bitmap?): Int? {
+    if (bitmap == null || bitmap.isRecycled || bitmap.width <= 0 || bitmap.height <= 0) return null
+    val stepX = max(1, bitmap.width / 16)
+    val stepY = max(1, bitmap.height / 16)
+    var r = 0L
+    var g = 0L
+    var b = 0L
+    var n = 0L
+    var y = 0
+    while (y < bitmap.height) {
+      var x = 0
+      while (x < bitmap.width) {
+        val c = bitmap.getPixel(x, y)
+        r += Color.red(c)
+        g += Color.green(c)
+        b += Color.blue(c)
+        n++
+        x += stepX
+      }
+      y += stepY
+    }
+    if (n == 0L) return null
+    return Color.rgb((r / n).toInt(), (g / n).toInt(), (b / n).toInt())
+  }
+
+  /** 把不透明色 [top] 以 [alpha] 叠在 [base] 上。 */
+  private fun over(base: Int, top: Int, alpha: Float): Int {
+    val a = alpha.coerceIn(0f, 1f)
+    fun mix(f: Int, b: Int) = (b + (f - b) * a).roundToInt().coerceIn(0, 255)
+    return Color.rgb(
+      mix(Color.red(top), Color.red(base)),
+      mix(Color.green(top), Color.green(base)),
+      mix(Color.blue(top), Color.blue(base))
+    )
   }
 
   /** 缩到极小再放大 = 廉价高斯模糊。 */
@@ -658,6 +760,22 @@ class FoliaBackgroundRenderer(
 
     private const val STAR_COUNT = 150
     private const val TINY_SIZE = 24
+
+    // 纱罩不透明度（绘制与「等效背景色」反推共用同一份常量，保证两者永远一致）
+    /** 封面模糊：上下渐变纱罩。 */
+    private const val COVER_BLUR_SCRIM_TOP = 0.62f
+    private const val COVER_BLUR_SCRIM_BOTTOM = 0.78f
+
+    /** 莫奈：横向可读性渐变。 */
+    private const val MONET_READABILITY_TOP_LEFT = 0.18f
+    private const val MONET_READABILITY_TOP_LEFT_HIGH = 0.32f
+    private const val MONET_READABILITY_BOTTOM_RIGHT = 0.66f
+    private const val MONET_READABILITY_BOTTOM_RIGHT_HIGH = 0.82f
+
+    /** 漫游：主题底色纱罩 + 上下压暗。 */
+    private const val NOMAND_BASE_SCRIM = 0.35f
+    private const val NOMAND_SCRIM_TOP = 0.30f
+    private const val NOMAND_SCRIM_BOTTOM = 0.55f
 
     // 莫奈
     private const val MONET_WIDTH = 640

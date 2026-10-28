@@ -69,8 +69,19 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
       if (field == value) return
       field = value
       backgroundRenderer.palette = value
+      updateLyricPalette()
       invalidateColors()
     }
+
+  /**
+   * 歌词实际使用的配色。
+   *
+   * 与 [palette] 分开：背景是「画出来」的（封面模糊 / 莫奈洗色 / 漫游色阶），
+   * 歌词又恰好可能来自同一张封面（「主色调取自封面」）——两者同源时颜色极近，歌词会糊掉。
+   * 这里按背景的**等效色**做 WCAG 对比度校正（见 [LyricContrast]），
+   * 只动歌词颜色的明度，**不动背景用色**，避免「改歌词色 → 背景变 → 再改色」的循环。
+   */
+  private var lyricPalette: Palette = Palette()
 
   /** 动态背景模式（封面模糊 / 莫奈 / 漫游 / 空）。 */
   var backgroundMode: LyricBackgroundMode = LyricBackgroundMode.COVER_BLUR
@@ -171,6 +182,8 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
     engine.positionProvider = { positionProvider?.invoke() ?: 0L }
     engine.playingProvider = { playingProvider?.invoke() ?: false }
     setOnTouchListener { _, e -> gestureDetector.onTouchEvent(e) }
+    // 背景等效色在后台线程算出，回调 post 回主线程再刷新歌词配色
+    backgroundRenderer.onBackdropChanged = { post { updateLyricPalette() } }
   }
 
   override fun onAttachedToWindow() {
@@ -229,6 +242,20 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
   private fun invalidateColors() {
     canvasView.invalidateColors()
     invalidate()
+  }
+
+  /**
+   * 按背景等效色重算歌词配色。
+   *
+   * 背景等效色在后台线程算出（换封面 / 换背景模式 / 换主题色都会变），
+   * 所以回调统一 post 回主线程再更新。
+   */
+  private fun updateLyricPalette() {
+    val backdrop = backgroundRenderer.backdropColor
+    val corrected = if (backdrop == 0) palette else palette.readableAgainst(backdrop)
+    if (corrected == lyricPalette) return
+    lyricPalette = corrected
+    invalidateColors()
   }
 
   // ============================================================================================
@@ -502,7 +529,7 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
       val mirrorTop = track.y + l.blockHeight * track.scale + fontPx * 0.30f
       floorPaint.textSize = fontPx
       floorPaint.shader = null
-      floorPaint.color = blend(palette.active, palette.sung, 0.35f)
+      floorPaint.color = blend(lyricPalette.active, lyricPalette.sung, 0.35f)
       floorPaint.alpha = (track.alpha * 52).toInt().coerceIn(0, 255)
       floorPaint.maskFilter = blurFilterFor(fontPx * 0.09f)
 
@@ -520,7 +547,7 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
 
     private fun drawHint(canvas: Canvas) {
       if (hintText.isEmpty()) return
-      hintPaint.color = palette.unsung
+      hintPaint.color = lyricPalette.unsung
       hintPaint.alpha = 180
       canvas.drawText(hintText, viewW / 2f, viewH / 2f, hintPaint)
     }
@@ -531,7 +558,7 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
 
     /** 上下文行：整行一次画完 + 按距离模糊/缩放。[blurBoost] 补偿透视缩小后模糊视觉变弱。 */
     private fun drawContextLine(canvas: Canvas, l: LineLayout, alpha: Float, d: Int, blurBoost: Float = 1f) {
-      val color = blend(palette.unsung, palette.active, 0.22f)
+      val color = blend(lyricPalette.unsung, lyricPalette.active, 0.22f)
       textPaint.shader = null
       textPaint.color = color
       textPaint.alpha = (alpha * 255 * 0.9f).toInt().coerceIn(0, 255)
@@ -550,7 +577,7 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
 
       if (tokens.isEmpty()) {
         textPaint.shader = null
-        textPaint.color = palette.sung
+        textPaint.color = lyricPalette.sung
         textPaint.alpha = (trackAlpha * 255).toInt().coerceIn(0, 255)
         textPaint.maskFilter = null
         for (r in 0 until l.rowCount) {
@@ -605,8 +632,8 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
       drawGlow(canvas, l, tokens, pos, trackAlpha)
 
       // 2) 文字层
-      val baseColor = palette.unsung
-      val wordColor = blend(palette.active, palette.sung, 0.25f)
+      val baseColor = lyricPalette.unsung
+      val wordColor = blend(lyricPalette.active, lyricPalette.sung, 0.25f)
       textPaint.maskFilter = null
 
       for (i in tokens.indices) {
@@ -743,7 +770,7 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
       val r1 = fontPx * 0.28f
       val r2 = fontPx * 0.65f
       val maxAlpha = 0.88f
-      val glowColor = palette.activeSecondary
+      val glowColor = lyricPalette.activeSecondary
 
       glowPaint.shader = null
       glowPaint.maskFilter = null
@@ -755,7 +782,7 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
         // 还没唱的词不发光；正在唱与已唱的词按包络发光
         if (pos <= t.startTime) continue
 
-        val color = blend(palette.active, glowColor, g)
+        val color = blend(lyricPalette.active, glowColor, g)
         val alpha = (g * maxAlpha * trackAlpha * 255).toInt().coerceIn(0, 255)
         val baseline = l.baseline0 + t.row * l.rowPitch
         val ox = t.x + l.rowOffsets[t.row]
@@ -776,8 +803,8 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
     // ============================================================================================
     private fun drawFume(canvas: Canvas, l: LineLayout, pos: Long, trackAlpha: Float) {
       val fontPx = textPaint.textSize
-      val baseColor = palette.unsung
-      val wordColor = blend(palette.active, palette.sung, 0.32f)
+      val baseColor = lyricPalette.unsung
+      val wordColor = blend(lyricPalette.active, lyricPalette.sung, 0.32f)
       // 整行柔光（英雄字的光晕）
       drawGlow(canvas, l, l.tokens, pos, trackAlpha)
       textPaint.maskFilter = null
@@ -815,8 +842,8 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
       val fontPx = textPaint.textSize
       val fm = textPaint.fontMetrics
       val centerY = (fm.ascent + fm.descent) / 2f
-      val cold = blend(palette.unsung, palette.active, 0.21f)   // illum≈0.6 → 0.35*0.6
-      val hot = blend(palette.active, palette.sung, 0.5f)
+      val cold = blend(lyricPalette.unsung, lyricPalette.active, 0.21f)   // illum≈0.6 → 0.35*0.6
+      val hot = blend(lyricPalette.active, lyricPalette.sung, 0.5f)
       // 关键词 = 最长的实词 token
       val keyIdx = l.tokens.indices.maxByOrNull { l.tokens[it].width } ?: -1
 
@@ -890,12 +917,12 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
           if (lit > 0.05f && dissolve < 0.95f) {
             glowPaint.shader = null
             glowPaint.maskFilter = null
-            glowPaint.color = palette.active
+            glowPaint.color = lyricPalette.active
             glowPaint.alpha = (lit * (0.10f + 0.25f * flash) * (1f - dissolve) * trackAlpha * 255)
               .toInt().coerceIn(0, 255)
             glowPaint.setShadowLayer(
               fontPx * 0.8f, 0f, 0f,
-              withAlpha(palette.activeSecondary, (lit * 160).toInt().coerceIn(0, 255))
+              withAlpha(lyricPalette.activeSecondary, (lit * 160).toInt().coerceIn(0, 255))
             )
             canvas.save()
             canvas.translate(ccx + ddx, cy + ddy)
@@ -910,7 +937,7 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
             val sy = cy + ddy + fontPx * 0.22f * (engine.seedRand(i * 29 + k, 11) - 0.5f) - fontPx * 0.25f
             val len = fontPx * 0.5f * (0.8f + 0.5f * flash)
             val starAlpha = (flash * 0.55f * trackAlpha * 255).toInt().coerceIn(0, 255)
-            starPaint.color = blend(palette.active, Color.WHITE, 0.5f)
+            starPaint.color = blend(lyricPalette.active, Color.WHITE, 0.5f)
             starPaint.alpha = starAlpha
             starPaint.strokeWidth = fontPx * 0.045f
             val angle = engine.seedRand(i * 7 + k, 12) * 90f + (1f - flash) * 30f
@@ -928,7 +955,7 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
 
     private fun drawTranslation(canvas: Canvas, l: LineLayout, trackAlpha: Float) {
       val trans = l.line.translation ?: return
-      transPaint.color = palette.translation
+      transPaint.color = lyricPalette.translation
       transPaint.alpha = (trackAlpha * 255 * FoliaLyricEngine.TRANSLATION_ALPHA).toInt().coerceIn(0, 255)
       transPaint.shader = null
       transPaint.maskFilter = null
@@ -979,8 +1006,8 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
     // ============================================================================================
     private fun drawCadenza(canvas: Canvas, l: LineLayout, pos: Long, trackAlpha: Float) {
       val fontPx = textPaint.textSize
-      val baseColor = palette.unsung
-      val wordColor = blend(palette.active, palette.sung, 0.30f)
+      val baseColor = lyricPalette.unsung
+      val wordColor = blend(lyricPalette.active, lyricPalette.sung, 0.30f)
       val maxW = (l.rowWidths.maxOrNull() ?: 0f)
       if (maxW <= 0f) return
 
@@ -1044,8 +1071,8 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
     // ============================================================================================
     private fun drawSonnet(canvas: Canvas, l: LineLayout, pos: Long, trackAlpha: Float) {
       val fontPx = textPaint.textSize
-      val baseColor = palette.unsung
-      val wordColor = blend(palette.active, palette.sung, 0.25f)
+      val baseColor = lyricPalette.unsung
+      val wordColor = blend(lyricPalette.active, lyricPalette.sung, 0.25f)
       textPaint.maskFilter = null
       // 诗稿细边框（围绕当前行包围盒）
       var minX = Float.MAX_VALUE
