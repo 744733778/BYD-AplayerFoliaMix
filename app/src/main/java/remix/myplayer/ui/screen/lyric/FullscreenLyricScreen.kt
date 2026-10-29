@@ -185,6 +185,9 @@ fun FullscreenLyricScreen() {
   val iconTint = LocalTheme.current.textPrimary
   val hint = if (lyrics.isEmpty()) "正在联网匹配歌词…" else ""
   val bgPanel = Color.Black.copy(alpha = 0.45f)
+  // 左下角封面尺寸；底部两侧控件统一按「封面尺寸的一半」再上移一次
+  val bottomCoverSize = 56.dp
+  val bottomLift = bottomCoverSize / 2
 
   Box(modifier = Modifier.fillMaxSize()) {
     AndroidView(
@@ -259,12 +262,13 @@ fun FullscreenLyricScreen() {
       }
     }
 
-    // 左下角：封面小图标 + 歌名（参考 folia；不显示歌手，且整体上移避开车机状态栏）
+    // 左下角：封面小图标 + 歌名（参考 folia；不显示歌手，整体上移避开车机状态栏，
+    // 再按封面尺寸的一半额外上移）
     if (song.valid()) {
       Column(
         modifier = Modifier
           .align(Alignment.BottomStart)
-          .padding(start = 16.dp, bottom = 40.dp),
+          .padding(start = 16.dp, bottom = 40.dp + bottomLift),
         verticalArrangement = Arrangement.spacedBy(5.dp)
       ) {
         val cover = coverBitmap
@@ -274,13 +278,13 @@ fun FullscreenLyricScreen() {
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier
-              .size(56.dp)
+              .size(bottomCoverSize)
               .clip(RoundedCornerShape(10.dp))
           )
         } else {
           Box(
             Modifier
-              .size(56.dp)
+              .size(bottomCoverSize)
               .clip(RoundedCornerShape(10.dp))
               .background(bgPanel)
           )
@@ -295,12 +299,12 @@ fun FullscreenLyricScreen() {
       }
     }
 
-    // 右下角主按钮：切换控制栏（透明背景，避免黑色圆按键；整体上移避开车机状态栏）
+    // 右下角主按钮：切换控制栏（透明背景，避免黑色圆按键；与左侧同样上移）
     IconButton(
       onClick = { panelOpen = !panelOpen },
       modifier = Modifier
         .align(Alignment.BottomEnd)
-        .padding(bottom = 48.dp, end = 16.dp)
+        .padding(bottom = 48.dp + bottomLift, end = 16.dp)
         .size(52.dp)
     ) {
       Icon(

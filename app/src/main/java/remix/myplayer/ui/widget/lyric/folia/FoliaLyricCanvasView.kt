@@ -415,6 +415,13 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
         val l = f.layout.getOrNull(t.lineIndex) ?: continue
         if (t.alpha <= 0.005f) continue
         val isActive = t.lineIndex == f.activeIndex && !t.leaving
+        // 行块中心已经跑到屏幕外就不画：宁可整行不出现，也不要半截字卡在屏幕边缘。
+        // （行距拉开后，更外面的上下文行在矮屏上会落到视口外）
+        if (!isActive) {
+          val halfH = l.blockHeight * t.scale / 2f
+          val cy = t.y + halfH
+          if (cy < 0f || cy > viewH) continue
+        }
         canvas.save()
         if (diorama) {
           applyDioramaTransform(canvas, l, t, f.activeIndex, focusY, nowSec)

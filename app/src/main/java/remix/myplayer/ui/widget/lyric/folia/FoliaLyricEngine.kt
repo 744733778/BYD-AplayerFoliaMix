@@ -506,13 +506,21 @@ class FoliaLyricEngine(private var metrics: TextMetrics) {
 
   private fun focusY(): Float = viewH * FOCUS_Y
 
+  /**
+   * 上下文行缩放。
+   *
+   * 注意用 [abs]：原实现写的是 `pow(0.9f, d - 1)`，d 为负时指数也是负的 → 缩放在 1 以上，
+   * 导致「已唱」的行比「未唱」的大（d=-1 是 0.89、d=-2 接近 1.0），
+   * 上方那行几乎和正在唱的一样大，视觉上就堆在一起。改成对称，两侧同样收敛。
+   */
   private fun toneScale(d: Int): Float =
-    if (d == 0) 1f else max(0.68f, 0.72f * pow(0.9f, d - 1))
+    if (d == 0) 1f else max(0.68f, 0.72f * pow(0.9f, abs(d) - 1))
 
   private fun toneAlpha(d: Int): Float = when {
     d == 0 -> 1f
     d > 0 -> max(0.36f, 0.72f - 0.18f * (d - 1))
-    else -> max(0.28f, 0.52f - 0.12f * (-d - 1))
+    // 刚唱完的那句（-1）要看得出来：别压得太暗，否则和背景糊成一片
+    else -> max(0.30f, 0.60f - 0.12f * (-d - 1))
   }
 
   private fun toneBlurPx(d: Int): Float = when {
@@ -521,7 +529,57 @@ class FoliaLyricEngine(private var metrics: TextMetrics) {
     else -> 1.1f + 0.7f * (-d - 1)
   }.let { it * density }
 
-  private fun gapPx(fontPx: Float): Float = max(sp(12f), fontPx * GAP_TO_FONT)
+  /**
+   * 行间距。
+   *
+   * 全屏歌词背景很花，三行贴太近时「刚唱完的」和「即将唱的」会糊进正在唱的那行里看不见。
+   * 这里按字号拉开间距，同时用**单侧可用高度**做上限：
+   * 保证焦点行与紧邻的上下两行一定完整落在屏幕内（更远的行由淡出 + 模糊收尾，推出屏外也无妨）。
+   */
+  private fun gapPx(fontPx: Float): Float {
+    val desired = max(sp(12f), fontPx * GAP_TO_FONT)
+    val active = layout.getOrNull(activeIndex) ?: return desired
+    val up = layout.getOrNull(activeIndex - 1)
+    val down = layout.getOrNull(activeIndex + 1)
+    if (up == null && down == null) return desired
+    val margin = sp(10f)
+    // 单侧余量 = 半屏 - 活动行半高 - 相邻行（缩放后）高度
+    fun roomFor(neighbor: LineLayout?, d: Int): Float =
+      if (neighbor == null) Float.MAX_VALUE
+      else viewH / 2f - margin - active.blockHeight / 2f - neighbor.blockHeight * toneScale(d)
+    val room = min(roomFor(up, -1), roomFor(down, 1))
+    if (room <= 0f) return desired
+    return min(desired, room)
+  }
+
+  /**
+   * 上下文行的纵向起点（该行块顶部的 y）。
+   *
+   * **每行必须各自占一个槽位**：`|d| ≥ 2` 的行要叠在相邻行之外，不能和相邻行共用同一个 y。
+   * 原实现里所有 `d > 0` 的行都算成 `anchorTop + activeH + gap`、所有 `d < 0` 的行都算成
+   * `anchorTop - gap - 本行高`，于是外侧行精确压在相邻行身上 —— 两行字重叠成一片糊字，
+   * 这就是「已唱和未唱堆叠在一起看不清」的原因。这里改成逐行累加。
+   */
+  private fun contextTop(d: Int, activeTop: Float, activeH: Float, gap: Float): Float {
+    if (d == 0) return activeTop
+    if (d > 0) {
+      // 下方：先跳过正在唱的那行，再逐行往下累加
+      var y = activeTop + activeH + gap
+      for (k in 1 until d) {
+        val l = layout.getOrNull(activeIndex + k) ?: break
+        y += l.blockHeight * toneScale(k) + gap
+      }
+      return y
+    }
+    // 上方：从正在唱的行往上逐行累加
+    var y = activeTop - gap
+    for (k in -1 downTo d) {
+      val l = layout.getOrNull(activeIndex + k) ?: break
+      y -= l.blockHeight * toneScale(k)
+      if (k > d) y -= gap
+    }
+    return y
+  }
 
   private fun syncTracks(fontPx: Float) {
     if (layout.isEmpty()) {
@@ -558,14 +616,12 @@ class FoliaLyricEngine(private var metrics: TextMetrics) {
       val t = Track()
       t.index = i
       val d = i - activeIndex
-      val blockH = layout[i].blockHeight * toneScale(d)
       val anchorTop = focusY() - layout[activeIndex].blockHeight / 2f
       val gap = gapPx(fontPx)
-      t.y = when {
-        d == 0 -> anchorTop + ENTER_OFFSET_PX * density
-        d < 0 -> anchorTop - gap - blockH - ENTER_OFFSET_PX * density
-        else -> anchorTop + layout[activeIndex].blockHeight + gap + ENTER_OFFSET_PX * density
-      }
+      // 入场从更外侧滑入（上方行往上、下方行往下）
+      val enterSign = if (d < 0) -1f else 1f
+      t.y = contextTop(d, anchorTop, layout[activeIndex].blockHeight, gap) +
+        enterSign * ENTER_OFFSET_PX * density
       t.scale = ENTER_SCALE
       t.alpha = 0f
       t.blur = ENTER_BLUR
@@ -596,9 +652,7 @@ class FoliaLyricEngine(private var metrics: TextMetrics) {
 
       var targetY = when {
         t.leaving -> t.y + if (t.leaveDir < 0) -EXIT_OFFSET_PX * density else EXIT_OFFSET_PX * density
-        d == 0 -> anchorTop
-        d < 0 -> anchorTop - gap - l.blockHeight * targetScale
-        else -> anchorTop + activeH + gap
+        else -> contextTop(d, anchorTop, activeH, gap)
       }
 
       val (ny, nvy) = springStep(t.y, t.vy, targetY, dt, 142f, 28f, 0.82f)
@@ -842,7 +896,14 @@ class FoliaLyricEngine(private var metrics: TextMetrics) {
     const val LINE_HEIGHT = 1.18f
     const val MAX_FONT_TO_WIDTH = 0.09f
     const val TRANS_TO_FONT = 0.5f
-    const val GAP_TO_FONT = 0.49f
+    /**
+     * 行间距相对字号的比例。
+     *
+     * 原版 0.49：正在唱那行与「刚唱完 / 即将唱」两行贴太近，背景一花就糊在一起。
+     * 现在拉到 0.95，让这三行各自独立呼吸；更外面的行本就淡出 + 模糊，推远不影响观感。
+     */
+    const val GAP_TO_FONT = 0.95f
+
     const val BASE_ALPHA = 0.42f
     const val TRANSLATION_ALPHA = 0.68f
 
