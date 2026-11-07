@@ -138,6 +138,8 @@ class SettingPrefs @Inject constructor(
     PrefKeys.Setting.REPLAY_GAIN_PEAK_PROTECTION,
     true
   )
+  /** 是否允许回放增益正向放大。默认关闭：只衰减不放大（mp3gain 风格），避免抬高底噪/削波导致音质变沙。 */
+  var replayGainAllowBoost by PrefsDelegate(sp, PrefKeys.Setting.REPLAY_GAIN_ALLOW_BOOST, false)
   var replayGainPreampDb by PrefsDelegate(sp, PrefKeys.Setting.REPLAY_GAIN_PREAMP, 0f)
   var replayGainMissingGainDb by PrefsDelegate(
     sp,

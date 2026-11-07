@@ -32,7 +32,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import remix.myplayer.ui.screen.playing.PlayQueuePanelContent
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.layout.ContentScale
@@ -91,6 +95,7 @@ fun FullscreenLyricScreen() {
   val lyricsFromManager by lyricManager.lyricsFlow.collectAsStateWithLifecycle()
   var offset by remember(song.id) { mutableLongStateOf(0L) }
   var panelOpen by remember { mutableStateOf(false) }
+  var showPlayQueue by remember { mutableStateOf(false) }
   var coverBitmap by remember(song.id) { mutableStateOf<Bitmap?>(null) }
   val lyrics = lyricsFromManager ?: emptyList()
   val effectModes = EffectMode.entries
@@ -140,6 +145,11 @@ fun FullscreenLyricScreen() {
   // 从播放页进入：返回时先恢复播放页浮窗再出栈，避免闪现主界面
   val navEntry by nav.currentBackStackEntryAsState()
   BackHandler {
+    // 播放队列打开时，返回键先关闭队列，而不是直接退出全屏歌词页
+    if (showPlayQueue) {
+      showPlayQueue = false
+      return@BackHandler
+    }
     scope.launch {
       if (navEntry?.savedStateHandle?.get<Boolean>(ExtraRestorePlayingScreen) == true) {
         mainVM.playingScreenState.snapTo(PlayingScreenValue.Expanded)
@@ -214,8 +224,8 @@ fun FullscreenLyricScreen() {
       modifier = Modifier.fillMaxSize()
     )
 
-    // 控制栏（展开时显示在底部）：上一曲 / 播放暂停 / 下一曲 / 特效 / 匹配
-    if (panelOpen) {
+    // 控制栏（展开时显示在底部）：上一曲 / 播放暂停 / 下一曲 / 特效 / 背景 / 匹配 / 播放列表
+    if (panelOpen && !showPlayQueue) {
       Row(
         modifier = Modifier
           .align(Alignment.BottomCenter)
@@ -259,6 +269,30 @@ fun FullscreenLyricScreen() {
           tint = iconTint,
           onClick = { nav.navigate(RouteLyricMatch) }
         )
+        CtrlIcon(
+          iconRes = R.drawable.ic_format_list_bulleted_white_24dp,
+          tint = iconTint,
+          label = stringResource(R.string.lyric_play_queue),
+          onClick = {
+            showPlayQueue = true
+            panelOpen = false
+          }
+        )
+      }
+    }
+
+    // 播放列表面板：由控制栏的「列表」按钮打开，复用播放页的队列组件
+    if (showPlayQueue) {
+      Box(
+        modifier = Modifier
+          .align(Alignment.Center)
+          .fillMaxWidth(0.62f)
+          .fillMaxHeight(0.72f)
+          .clip(RoundedCornerShape(16.dp))
+          .background(bg.copy(alpha = 0.94f))
+          .padding(8.dp)
+      ) {
+        PlayQueuePanelContent(onClose = { showPlayQueue = false })
       }
     }
 
@@ -300,18 +334,20 @@ fun FullscreenLyricScreen() {
     }
 
     // 右下角主按钮：切换控制栏（透明背景，避免黑色圆按键；与左侧同样上移）
-    IconButton(
-      onClick = { panelOpen = !panelOpen },
-      modifier = Modifier
-        .align(Alignment.BottomEnd)
-        .padding(bottom = 48.dp + bottomLift, end = 16.dp)
-        .size(52.dp)
-    ) {
-      Icon(
-        painter = painterResource(R.drawable.ic_more_vert_white_24dp),
-        contentDescription = null,
-        tint = iconTint
-      )
+    if (!showPlayQueue) {
+      IconButton(
+        onClick = { panelOpen = !panelOpen },
+        modifier = Modifier
+          .align(Alignment.BottomEnd)
+          .padding(bottom = 48.dp + bottomLift, end = 16.dp)
+          .size(52.dp)
+      ) {
+        Icon(
+          painter = painterResource(R.drawable.ic_more_vert_white_24dp),
+          contentDescription = null,
+          tint = iconTint
+        )
+      }
     }
   }
 }

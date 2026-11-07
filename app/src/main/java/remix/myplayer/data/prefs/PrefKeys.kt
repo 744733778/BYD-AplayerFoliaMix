@@ -143,6 +143,9 @@ object PrefKeys {
     /** 回放增益峰值保护 */
     const val REPLAY_GAIN_PEAK_PROTECTION = "replay_gain_peak_protection"
 
+    /** 回放增益：是否允许正向放大（默认关闭，只衰减） */
+    const val REPLAY_GAIN_ALLOW_BOOST = "replay_gain_allow_boost"
+
     /** 回放增益前置放大 */
     const val REPLAY_GAIN_PREAMP = "replay_gain_preamp"
 

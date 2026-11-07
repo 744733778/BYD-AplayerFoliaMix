@@ -31,6 +31,7 @@ data class PlaySettings(
   val replayGainEnabled: Boolean,
   val replayGainMode: Int,
   val replayGainPeakProtection: Boolean,
+  val replayGainAllowBoost: Boolean = false,
   val replayGainPreampDb: Float,
   val replayGainMissingGainDb: Float,
   val loudnessAutoAnalyzeEnabled: Boolean,

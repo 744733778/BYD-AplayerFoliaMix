@@ -129,6 +129,14 @@ fun ReplayGainSettingsLogic() {
     settingVM.setReplayGainPeakProtection(it)
   }
 
+  SwitchPreference(
+    title = stringResource(R.string.play_replay_gain_allow_boost),
+    content = stringResource(R.string.play_replay_gain_allow_boost_tip),
+    checked = settingState.play.replayGainAllowBoost
+  ) {
+    settingVM.setReplayGainAllowBoost(it)
+  }
+
   ReplayGainGainSlider(
     title = stringResource(R.string.play_replay_gain_preamp),
     content = stringResource(R.string.play_replay_gain_preamp_tip),

@@ -572,6 +572,9 @@
   <string name="play_replay_gain_peak_protection">Peak protection</string>
   <string name="play_replay_gain_peak_protection_off">Peak protection off</string>
   <string name="play_replay_gain_peak_protection_tip">Prevent clipping by limiting gain based on the audio peak</string>
+  <string name="play_replay_gain_allow_boost">Allow amplification</string>
+  <string name="play_replay_gain_allow_boost_tip">Off by default: only attenuate (mp3gain-style), so quiet recordings never get their noise floor raised or clipped. Turn on to fully align loudness by boosting quiet songs — may degrade sound quality.</string>
+  <string name="lyric_play_queue">Queue</string>
   <string name="play_replay_gain_gain_summary">%1$s · %2$s</string>
   <string name="play_replay_gain_preamp">Preamp</string>
   <string name="play_replay_gain_preamp_tip">Added to the ReplayGain value of tagged audio</string>

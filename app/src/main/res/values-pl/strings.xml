@@ -566,6 +566,9 @@
   <string name="play_replay_gain_peak_protection">Ochrona przed przesterowaniem (Peak)</string>
   <string name="play_replay_gain_peak_protection_off">Ochrona przed przesterowaniem wyłączona</string>
   <string name="play_replay_gain_peak_protection_tip">Zapobiega zniekształceniom (clippingowi) poprzez ograniczanie wzmocnienia na podstawie szczytowych wartości audio</string>
+  <string name="play_replay_gain_allow_boost">Zezwól na wzmocnienie</string>
+  <string name="play_replay_gain_allow_boost_tip">Domyślnie wyłączone: tylko tłumienie (jak mp3gain), bez podnoszenia szumu własnego i przesterowania. Włączenie wyrównuje głośność przez wzmacnianie cichych utworów — może pogorszyć jakość dźwięku.</string>
+  <string name="lyric_play_queue">Kolejka</string>
   <string name="play_replay_gain_gain_summary">%1$s · %2$s</string>
   <string name="play_replay_gain_preamp">Przedwzmacniacz (Preamp)</string>
   <string name="play_replay_gain_preamp_tip">Wartość dodawana do zapisanego w tagach współczynnika ReplayGain</string>

@@ -100,6 +100,7 @@ class SettingViewModel @Inject constructor(
       replayGainEnabled = settingPrefs.replayGainEnabled,
       replayGainMode = settingPrefs.replayGainMode,
       replayGainPeakProtection = settingPrefs.replayGainPeakProtection,
+      replayGainAllowBoost = settingPrefs.replayGainAllowBoost,
       replayGainPreampDb = SettingPrefs.normalizeReplayGainGainDb(settingPrefs.replayGainPreampDb),
       replayGainMissingGainDb = SettingPrefs.normalizeReplayGainGainDb(
         settingPrefs.replayGainMissingGainDb
@@ -272,6 +273,11 @@ class SettingViewModel @Inject constructor(
   fun setReplayGainPeakProtection(enabled: Boolean) {
     settingPrefs.replayGainPeakProtection = enabled
     _settingsState.update { it.copy(play = it.play.copy(replayGainPeakProtection = enabled)) }
+  }
+
+  fun setReplayGainAllowBoost(enabled: Boolean) {
+    settingPrefs.replayGainAllowBoost = enabled
+    _settingsState.update { it.copy(play = it.play.copy(replayGainAllowBoost = enabled)) }
   }
 
   fun setReplayGainPreamp(gainDb: Float) {

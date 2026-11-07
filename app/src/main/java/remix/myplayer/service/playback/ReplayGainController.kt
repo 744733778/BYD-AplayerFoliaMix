@@ -99,6 +99,11 @@ class ReplayGainController @Inject constructor(
     val gainDb = tagGainDb?.plus(settingPrefs.replayGainPreampDb)
       ?: settingPrefs.replayGainMissingGainDb
     val peak = if (selectedAlbumGain) gain?.albumPeak else gain?.trackPeak
-    processor.setGain(gainDb, peak, settingPrefs.replayGainPeakProtection)
+    processor.setGain(
+      gainDb,
+      peak,
+      settingPrefs.replayGainPeakProtection,
+      settingPrefs.replayGainAllowBoost
+    )
   }
 }

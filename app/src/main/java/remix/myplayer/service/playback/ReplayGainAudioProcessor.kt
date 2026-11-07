@@ -31,30 +31,39 @@ class ReplayGainAudioProcessor : BaseAudioProcessor() {
   /**
    * Set the gain to apply. Pass null (or 0 dB) to disable.
    *
+   * mp3gain-style safety: by default this processor only ever attenuates the
+   * signal (never boosts it) and keeps 1 dB of headroom for the downstream EQ /
+   * crossfade chain. Boosting quiet recordings raises their noise floor and,
+   * after later gain stages, hard-clips against full scale — that is exactly the
+   * "sandy" distortion this strategy avoids. Set [allowBoost] to opt back into
+   * full ReplayGain alignment (the user then accepts the quality trade-off).
+   *
    * @param gainDb ReplayGain value in dB
    * @param peak Stored peak (0..1) of the source
    * @param peakProtection Whether to prevent clipping using the stored peak
+   * @param allowBoost Permit gains above 0 dB. Off by default.
    */
   fun setGain(
     gainDb: Float?,
     peak: Float? = null,
-    peakProtection: Boolean = true
+    peakProtection: Boolean = true,
+    allowBoost: Boolean = false
   ) {
     if (gainDb == null) {
       targetGainLinear = 1f
       return
     }
     val gainLinear = exp(gainDb * ln(10f) / 20f)
-    val limited = if (peakProtection) {
-      if (peak != null && peak.isFinite() && peak > 0f) {
-        min(gainLinear, 1f / peak)
-      } else {
-        min(gainLinear, 1f)
-      }
+    // A missing / invalid peak must never be interpreted as permission to boost.
+    val peakCeiling = if (peak != null && peak.isFinite() && peak > 0f) {
+      1f / peak
     } else {
-      gainLinear
+      Float.POSITIVE_INFINITY
     }
-    targetGainLinear = limited
+    // 10^(-1/20) ~= 0.891: -1 dBFS ceiling leaves room for EQ / crossfade.
+    val headroomCeiling = if (allowBoost) Float.POSITIVE_INFINITY else 0.89125094f
+    val ceiling = if (peakProtection) min(peakCeiling, headroomCeiling) else headroomCeiling
+    targetGainLinear = min(gainLinear, ceiling).coerceAtLeast(0f)
   }
 
   override fun onConfigure(inputAudioFormat: AudioFormat): AudioFormat {

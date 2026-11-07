@@ -556,6 +556,9 @@
   <string name="play_replay_gain_peak_protection">ピーク保護</string>
   <string name="play_replay_gain_peak_protection_off">ピーク保護オフ</string>
   <string name="play_replay_gain_peak_protection_tip">音声のピーク値に基づいてゲインを制限し、クリッピングノイズを防ぎます</string>
+  <string name="play_replay_gain_allow_boost">正方向の増幅を許可</string>
+  <string name="play_replay_gain_allow_boost_tip">既定はオフ：mp3gain のように減衰のみ行い、ノイズフロアの持ち上げやクリッピングを防いで音質の劣化を避けます。オンにすると静かな曲を増幅して音量を完全にそろえますが、音質が低下する場合があります。</string>
+  <string name="lyric_play_queue">キュー</string>
   <string name="play_replay_gain_gain_summary">%1$s・%2$s</string>
   <string name="play_replay_gain_preamp">プリアンプ</string>
   <string name="play_replay_gain_preamp_tip">ReplayGain タグ付き音声のゲイン値に加算します</string>

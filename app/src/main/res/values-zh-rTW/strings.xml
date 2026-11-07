@@ -559,6 +559,9 @@
   <string name="play_replay_gain_peak_protection">峰值保護</string>
   <string name="play_replay_gain_peak_protection_off">峰值保護已關閉</string>
   <string name="play_replay_gain_peak_protection_tip">根據音訊峰值限制增益，防止爆音</string>
+  <string name="play_replay_gain_allow_boost">允許正向放大</string>
+  <string name="play_replay_gain_allow_boost_tip">預設關閉：只衰減不放大（參考 mp3gain），不會抬高底噪或削波，避免音質變沙。開啟後輕聲歌曲會被放大以完全對齊響度，可能損失音質。</string>
+  <string name="lyric_play_queue">清單</string>
   <string name="play_replay_gain_gain_summary">%1$s · %2$s</string>
   <string name="play_replay_gain_preamp">前置放大</string>
   <string name="play_replay_gain_preamp_tip">疊加到帶有回放增益標籤的音訊增益值上</string>
