@@ -63,6 +63,7 @@ import remix.myplayer.service.playback.Playback
 import remix.myplayer.service.playback.ReplayGainController
 import remix.myplayer.service.playback.PlaybackFavoriteState
 import remix.myplayer.service.playback.PlaybackProgressSaver
+import remix.myplayer.service.playback.NextSongPrefetcher
 import remix.myplayer.ui.activity.LockScreenActivity
 import remix.myplayer.ui.activity.base.BaseMusicActivity
 import remix.myplayer.ui.activity.base.BaseMusicActivity.Companion.EXTRA_PERMISSION
@@ -133,6 +134,9 @@ class MusicService : BaseService(),
 
   @Inject
   lateinit var replayGainController: ReplayGainController
+
+  @Inject
+  lateinit var nextSongPrefetcher: NextSongPrefetcher
 
   private val stateSource = MusicStateSource
 
@@ -566,6 +570,14 @@ class MusicService : BaseService(),
     pushProgressUiState()
     updateProgressTicker()
 
+    // 播放满 1 分钟后预载下一曲的歌词/封面/响度，减少自然切歌卡顿。
+    // 自带轮询，不受亮屏与「断点播放」开关影响；provider 在 playback 未就绪时返回安全值。
+    nextSongPrefetcher.start(
+      positionProvider = { if (::playback.isInitialized) playback.position else 0L },
+      songProvider = { if (::playback.isInitialized) playback.currentSong else null },
+      nextProvider = { if (::playback.isInitialized) playback.nextSong else null },
+    )
+
     Timber.v("setUpPlayback, audioSessionId: ${playback.audioSessionId}")
     EQHelper.updateAudioSession(this, playback.audioSessionId)
   }
@@ -694,6 +706,7 @@ class MusicService : BaseService(),
     }
 
     playbackProgressSaver.stop()
+    nextSongPrefetcher.stop()
     playbackFavoriteState.cancelLookup()
     appWidgetUpdater.stop()
     cancel()
