@@ -67,8 +67,14 @@ import remix.myplayer.viewmodel.PlayingScreenValue
 import remix.myplayer.viewmodel.mainViewModel
 import remix.myplayer.viewmodel.playbackViewModel
 import remix.myplayer.viewmodel.settingViewModel
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.snapTo
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.input.pointer.pointerInput
+
+/** 播放队列面板占屏比例；「点击面板外关闭」的几何判定与面板尺寸共用，避免两处不一致。 */
+private const val QUEUE_PANEL_WIDTH_FRACTION = 0.62f
+private const val QUEUE_PANEL_HEIGHT_FRACTION = 0.72f
 
 /**
  * 全屏歌词页：Canvas 渲染（[FoliaLyricCanvasView]，Folia 风格逐字扫光）。
@@ -96,6 +102,9 @@ fun FullscreenLyricScreen() {
   var offset by remember(song.id) { mutableLongStateOf(0L) }
   var panelOpen by remember { mutableStateOf(false) }
   var showPlayQueue by remember { mutableStateOf(false) }
+  // 滑动切歌回调只在 factory 里设置一次，用 updated state 读取最新的队列面板状态，
+  // 避免播放列表面板打开时左右滑动误切歌
+  val queueOpen by rememberUpdatedState(showPlayQueue)
   var coverBitmap by remember(song.id) { mutableStateOf<Bitmap?>(null) }
   val lyrics = lyricsFromManager ?: emptyList()
   val effectModes = EffectMode.entries
@@ -205,6 +214,16 @@ fun FullscreenLyricScreen() {
         FoliaLyricCanvasView(ctx).apply {
           // 屏显位置带歌词偏移，seek 时要把它减回去
           onSeek = { playbackVM.setProgress(it - offset) }
+          // 左右滑动切歌：左滑(dx<0)下一曲、右滑(dx>0)上一曲；队列面板打开时不响应
+          onSwipeSong = { toNext ->
+            if (!queueOpen) {
+              sendLocalBroadcast(
+                makeCmdIntent(
+                  if (toNext) Command.SKIP_TO_NEXT else Command.SKIP_TO_PREVIOUS
+                )
+              )
+            }
+          }
         }
       },
       update = { view ->
@@ -283,11 +302,29 @@ fun FullscreenLyricScreen() {
 
     // 播放列表面板：由控制栏的「列表」按钮打开，复用播放页的队列组件
     if (showPlayQueue) {
+      // 面板以外的透明点击层：点击任意外部区域即关闭队列面板。
+      // 用几何判断排除面板矩形，面板自身不加任何手势 modifier，
+      // 因此队列内的点选、纵向滚动、横向翻页手势完全不受影响。
+      // 该层同时消费触摸，避免点击穿透到底层歌词触发单击 seek / 左右滑动切歌。
+      Box(
+        modifier = Modifier
+          .fillMaxSize()
+          .pointerInput(Unit) {
+            detectTapGestures(onTap = { offset ->
+              val left = size.width * (1f - QUEUE_PANEL_WIDTH_FRACTION) / 2f
+              val right = size.width - left
+              val top = size.height * (1f - QUEUE_PANEL_HEIGHT_FRACTION) / 2f
+              val bottom = size.height - top
+              val insidePanel = offset.x in left..right && offset.y in top..bottom
+              if (!insidePanel) showPlayQueue = false
+            })
+          }
+      )
       Box(
         modifier = Modifier
           .align(Alignment.Center)
-          .fillMaxWidth(0.62f)
-          .fillMaxHeight(0.72f)
+          .fillMaxWidth(QUEUE_PANEL_WIDTH_FRACTION)
+          .fillMaxHeight(QUEUE_PANEL_HEIGHT_FRACTION)
           .clip(RoundedCornerShape(16.dp))
           .background(bg.copy(alpha = 0.94f))
           .padding(8.dp)

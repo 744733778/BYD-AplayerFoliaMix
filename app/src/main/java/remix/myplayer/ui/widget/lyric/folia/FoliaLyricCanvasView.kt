@@ -37,6 +37,9 @@ import kotlin.math.sin
 private const val DIORAMA_FOCAL = 1.0f
 private const val DIORAMA_DEPTH = 1.45f
 
+/** 触发左右滑动切歌的最小水平位移（dp）。远大于 touch slop，避免误触单击 seek。 */
+private const val SWIPE_SONG_MIN_DP = 72f
+
 /**
  * 特效歌词渲染器（Folia 风格，纯 Canvas 2D 管线）。
  *
@@ -140,6 +143,12 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
   var onSeek: ((Long) -> Unit)? = null
 
   /**
+   * 左右滑动切歌回调：`true` = 左滑（下一曲），`false` = 右滑（上一曲）。
+   * 由全屏歌词页设置；播放队列等面板打开时可置 null 临时关闭。
+   */
+  var onSwipeSong: ((Boolean) -> Unit)? = null
+
+  /**
    * 当前实际生效的模式。
    * 全部 6 种模式均由 Canvas 2D 原生渲染，直接按所选模式渲染，保证车机始终有完整特效。
    */
@@ -167,6 +176,9 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
 
   private val gestureDetector = GestureDetectorCompat(context, object :
     GestureDetector.SimpleOnGestureListener() {
+    // 必须消费 ACTION_DOWN，否则本 FrameLayout（非 clickable）不会收到后续
+    // MOVE/UP，滑动切歌与 onSingleTapUp 都会失效。
+    override fun onDown(e: MotionEvent): Boolean = true
     override fun onSingleTapUp(e: MotionEvent): Boolean {
       engine.seekTarget(e.y)?.let { onSeek?.invoke(it) }
       ensureCallback()
@@ -181,7 +193,29 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
     engine.spUnit = resources.displayMetrics.scaledDensity
     engine.positionProvider = { positionProvider?.invoke() ?: 0L }
     engine.playingProvider = { playingProvider?.invoke() ?: false }
-    setOnTouchListener { _, e -> gestureDetector.onTouchEvent(e) }
+    // 左右滑动切歌：只「旁路观察」ACTION_DOWN/UP 的水平位移，
+    // 原有 gestureDetector 的调用与返回值一字不改，单击歌词 seek 不受影响
+    // （超过 touch slop 的移动本来就不会触发 onSingleTapUp）。
+    val swipeThresholdPx = SWIPE_SONG_MIN_DP * resources.displayMetrics.density
+    var swipeStartX = 0f
+    var swipeStartY = 0f
+    setOnTouchListener { _, e ->
+      when (e.actionMasked) {
+        MotionEvent.ACTION_DOWN -> {
+          swipeStartX = e.x
+          swipeStartY = e.y
+        }
+        MotionEvent.ACTION_UP -> {
+          val dx = e.x - swipeStartX
+          val dy = e.y - swipeStartY
+          // 水平位移够大、且明显主导于垂直位移时才判定为切歌滑动
+          if (abs(dx) >= swipeThresholdPx && abs(dx) > abs(dy) * 1.2f) {
+            onSwipeSong?.invoke(dx < 0) // dx<0 = 左滑 → 下一曲
+          }
+        }
+      }
+      gestureDetector.onTouchEvent(e)
+    }
     // 背景等效色在后台线程算出，回调 post 回主线程再刷新歌词配色
     backgroundRenderer.onBackdropChanged = { post { updateLyricPalette() } }
   }
