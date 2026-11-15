@@ -2,6 +2,7 @@ package remix.myplayer.ui.screen.lyric
 
 import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
@@ -54,7 +55,9 @@ import remix.myplayer.lyric.LyricLine
 import remix.myplayer.service.Command
 import remix.myplayer.service.playback.MusicStateSource
 import remix.myplayer.ui.nav.ExtraRestorePlayingScreen
+import remix.myplayer.helper.EQHelper
 import remix.myplayer.ui.nav.LocalNavController
+import remix.myplayer.ui.nav.RouteEq
 import remix.myplayer.ui.nav.RouteLyricMatch
 import remix.myplayer.ui.widget.lyric.folia.EffectMode
 import remix.myplayer.ui.widget.lyric.folia.FoliaLyricCanvasView
@@ -78,12 +81,14 @@ private const val QUEUE_PANEL_HEIGHT_FRACTION = 0.72f
 
 /**
  * 全屏歌词页：Canvas 渲染（[FoliaLyricCanvasView]，Folia 风格逐字扫光）。
- * 右下角一个主按钮，点击弹出控制栏：上一曲 / 播放暂停 / 下一曲 / 特效切换 / 联网匹配。
+ * 手势：**单击播放/暂停**、左滑下一曲、右滑上一曲。
+ * 右下角一个主按钮，点击弹出控制栏：特效切换 / 背景切换 / 音效 / 联网匹配歌词 / 播放列表。
  * 从播放页进入时（[ExtraRestorePlayingScreen]），返回键先恢复播放页浮窗再出栈。
  */
 @Composable
 fun FullscreenLyricScreen() {
   val context = LocalContext.current
+  val activity = LocalActivity.current
   val nav = LocalNavController.current
   val settingVM = settingViewModel
   val playbackVM = playbackViewModel
@@ -212,8 +217,10 @@ fun FullscreenLyricScreen() {
     AndroidView(
       factory = { ctx ->
         FoliaLyricCanvasView(ctx).apply {
-          // 屏显位置带歌词偏移，seek 时要把它减回去
-          onSeek = { playbackVM.setProgress(it - offset) }
+          // 单击切播放/暂停；队列面板打开时不响应（避免点面板外的透明层时误触发）
+          onTogglePlay = {
+            if (!queueOpen) sendLocalBroadcast(makeCmdIntent(Command.PLAY_PAUSE))
+          }
           // 左右滑动切歌：左滑(dx<0)下一曲、右滑(dx>0)上一曲；队列面板打开时不响应
           onSwipeSong = { toNext ->
             if (!queueOpen) {
@@ -243,7 +250,8 @@ fun FullscreenLyricScreen() {
       modifier = Modifier.fillMaxSize()
     )
 
-    // 控制栏（展开时显示在底部）：上一曲 / 播放暂停 / 下一曲 / 特效 / 背景 / 匹配 / 播放列表
+    // 控制栏（展开时显示在底部）：特效 / 背景 / 音效 / 歌词 / 播放列表
+    // 上一曲、播放暂停、下一曲已改为手势：单击播放/暂停、左滑下一曲、右滑上一曲
     if (panelOpen && !showPlayQueue) {
       Row(
         modifier = Modifier
@@ -256,22 +264,6 @@ fun FullscreenLyricScreen() {
         verticalAlignment = Alignment.CenterVertically
       ) {
         CtrlIcon(
-          iconRes = R.drawable.play_btn_pre,
-          tint = iconTint,
-          onClick = { sendLocalBroadcast(makeCmdIntent(Command.SKIP_TO_PREVIOUS)) }
-        )
-        CtrlIcon(
-          iconRes = if (playbackState.isPlaying) R.drawable.ic_pause_black_24dp else R.drawable.ic_play_arrow_black_24dp,
-          tint = iconTint,
-          size = 30.dp,
-          onClick = { sendLocalBroadcast(makeCmdIntent(Command.PLAY_PAUSE)) }
-        )
-        CtrlIcon(
-          iconRes = R.drawable.play_btn_next,
-          tint = iconTint,
-          onClick = { sendLocalBroadcast(makeCmdIntent(Command.SKIP_TO_NEXT)) }
-        )
-        CtrlIcon(
           iconRes = R.drawable.ic_palette_24dp,
           tint = iconTint,
           label = effectMode.label,
@@ -283,9 +275,20 @@ fun FullscreenLyricScreen() {
           label = backgroundMode.label,
           onClick = { backgroundIndex = (backgroundIndex + 1) % backgroundModes.size }
         )
+        // 音效：与设置页/播放页菜单同一入口（系统音效面板可用则优先，否则进应用内均衡器）
+        CtrlIcon(
+          iconRes = R.drawable.ic_music_note_24dp,
+          tint = iconTint,
+          label = stringResource(R.string.lyric_sound_effect),
+          onClick = {
+            activity?.let { EQHelper.startEqualizer(it) { nav.navigate(RouteEq) } }
+          }
+        )
         CtrlIcon(
           iconRes = R.drawable.ic_search_white_24dp,
           tint = iconTint,
+          // 与其他按钮一致，底部补上文字标签
+          label = stringResource(R.string.lrc),
           onClick = { nav.navigate(RouteLyricMatch) }
         )
         CtrlIcon(
@@ -310,12 +313,13 @@ fun FullscreenLyricScreen() {
         modifier = Modifier
           .fillMaxSize()
           .pointerInput(Unit) {
-            detectTapGestures(onTap = { offset ->
+            detectTapGestures(onTap = { tapOffset ->
               val left = size.width * (1f - QUEUE_PANEL_WIDTH_FRACTION) / 2f
               val right = size.width - left
               val top = size.height * (1f - QUEUE_PANEL_HEIGHT_FRACTION) / 2f
               val bottom = size.height - top
-              val insidePanel = offset.x in left..right && offset.y in top..bottom
+              // 用 tapOffset 避免与外层的歌词偏移量 offset(Long) 同名混淆
+              val insidePanel = tapOffset.x in left..right && tapOffset.y in top..bottom
               if (!insidePanel) showPlayQueue = false
             })
           }

@@ -50,7 +50,8 @@ private const val SWIPE_SONG_MIN_DP = 72f
  *   SONNET 商籁）全部由 Canvas 2D 原生绘制（流光扫光 / 绘光 / 镜台透视 / 浮名字雾 /
  *   心象升腾 / 商籁镂空），零 GLES 依赖、车机零黑屏；
  * - 公开 API：lyrics / fontScale / effectMode / hintText / coverBitmap /
- *   positionProvider / playingProvider / palette / onSeek / onPlaybackStateChanged；
+ *   positionProvider / playingProvider / palette / onTogglePlay / onSwipeSong /
+ *   onPlaybackStateChanged；
  * - 播放进度按墙钟外推（服务端 100ms 一跳）；只在「播放中 / 弹簧未落位 / 光晕未熄 /
  *   粒子未散尽」时注册 Choreographer。
  *
@@ -140,7 +141,13 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
 
   var positionProvider: (() -> Long)? = null
   var playingProvider: (() -> Boolean)? = null
-  var onSeek: ((Long) -> Unit)? = null
+
+  /**
+   * 单击（tap）回调：切换播放/暂停。
+   * 全屏歌词页把「播放 / 上一曲 / 下一曲」都放到了手势上，因此单击不再用于
+   * 点击歌词行跳转进度，改为播放/暂停。由全屏歌词页设置；面板打开时由调用方忽略。
+   */
+  var onTogglePlay: (() -> Unit)? = null
 
   /**
    * 左右滑动切歌回调：`true` = 左滑（下一曲），`false` = 右滑（上一曲）。
@@ -180,7 +187,8 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
     // MOVE/UP，滑动切歌与 onSingleTapUp 都会失效。
     override fun onDown(e: MotionEvent): Boolean = true
     override fun onSingleTapUp(e: MotionEvent): Boolean {
-      engine.seekTarget(e.y)?.let { onSeek?.invoke(it) }
+      // 单击 = 播放/暂停（原来这里是点击歌词行 seek，已被手势分工取代）
+      onTogglePlay?.invoke()
       ensureCallback()
       return true
     }
@@ -194,7 +202,7 @@ class FoliaLyricCanvasView @JvmOverloads constructor(
     engine.positionProvider = { positionProvider?.invoke() ?: 0L }
     engine.playingProvider = { playingProvider?.invoke() ?: false }
     // 左右滑动切歌：只「旁路观察」ACTION_DOWN/UP 的水平位移，
-    // 原有 gestureDetector 的调用与返回值一字不改，单击歌词 seek 不受影响
+    // 原有 gestureDetector 的调用与返回值一字不改，单击切换播放/暂停不受影响
     // （超过 touch slop 的移动本来就不会触发 onSingleTapUp）。
     val swipeThresholdPx = SWIPE_SONG_MIN_DP * resources.displayMetrics.density
     var swipeStartX = 0f

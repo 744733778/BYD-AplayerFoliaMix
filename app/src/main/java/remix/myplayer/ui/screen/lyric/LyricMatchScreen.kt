@@ -201,15 +201,25 @@ fun LyricMatchScreen() {
             label = { Text(stringResource(R.string.lyric_match_hint)) },
             singleLine = true,
             modifier = Modifier.weight(1f),
-            textStyle = TextStyle(color = Color.White),
+            // 搜索框不跟随封面配色：固定浅色底 + 恒定黑字，
+            // 避免封面偏白时“白底白字”导致关键词看不清
+            textStyle = TextStyle(color = Color.Black),
             colors = OutlinedTextFieldDefaults.colors(
-              focusedTextColor = Color.White,
-              unfocusedTextColor = Color.White,
-              cursorColor = Color.White,
-              focusedLabelColor = Color.White.copy(alpha = 0.7f),
-              unfocusedLabelColor = Color.White.copy(alpha = 0.5f),
-              focusedBorderColor = Color.White.copy(alpha = 0.6f),
-              unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+              focusedTextColor = Color.Black,
+              unfocusedTextColor = Color.Black,
+              disabledTextColor = searchFieldTextMuted,
+              focusedContainerColor = searchFieldBackground,
+              unfocusedContainerColor = searchFieldBackground,
+              disabledContainerColor = searchFieldBackground,
+              cursorColor = Color.Black,
+              focusedLabelColor = searchFieldTextMuted,
+              unfocusedLabelColor = searchFieldTextMuted,
+              focusedPlaceholderColor = searchFieldTextMuted,
+              unfocusedPlaceholderColor = searchFieldTextMuted,
+              focusedBorderColor = Color.Black.copy(alpha = 0.55f),
+              unfocusedBorderColor = Color.Black.copy(alpha = 0.28f),
+              focusedTrailingIconColor = Color.Black,
+              unfocusedTrailingIconColor = searchFieldTextMuted,
             ),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { runSearch() }),
@@ -218,7 +228,7 @@ fun LyricMatchScreen() {
                 Icon(
                   painter = painterResource(R.drawable.ic_search_white_24dp),
                   contentDescription = null,
-                  tint = Color.White
+                  tint = Color.Black
                 )
               }
             }
@@ -456,6 +466,14 @@ private fun ApplyButton(enabled: Boolean, loading: Boolean, onClick: () -> Unit,
       .padding(horizontal = 22.dp, vertical = 12.dp)
   )
 }
+
+/**
+ * 搜索框固定配色：不跟随封面/主题变色。
+ * 之前用白字透明底，遇到封面偏白时会“白底白字”，关键词看不清；
+ * 现在固定为浅色底 + 黑字，任何封面下都可读。
+ */
+private val searchFieldBackground = Color.White.copy(alpha = 0.92f)
+private val searchFieldTextMuted = Color.Black.copy(alpha = 0.55f)
 
 private fun formatDuration(ms: Long): String {
   val totalSec = ms / 1000
